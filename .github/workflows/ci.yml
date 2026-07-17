@@ -38,7 +38,7 @@ jobs:
       - name: Import smoke test
         run: |
           PYTHONPATH=services/transcription-service \
-            python -c "from app.main import app; assert app.version == '0.1.6'"
+            python -c "from app.main import app; assert app.version == '0.1.7'"
 
   windows-audio-agent-python:
     runs-on: ubuntu-latest

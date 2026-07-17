@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.engine import EngineResult, EngineSegment, TranscriptionEngine
 from app.main import create_app
+from app.metrics import LatencyMetricsRegistry
 
 
 @dataclass
@@ -42,11 +43,11 @@ class FakeTranscriptionEngine(TranscriptionEngine):
         )
 
 
-def make_test_settings() -> Settings:
+def make_test_settings(**overrides) -> Settings:
     # Small windows keep the synthetic streams short; zero mic delay keeps the
     # echo-suppression path fast. min_audio > overlap so the leftover overlap
     # bytes never trigger a final flush after the client disconnects.
-    return Settings(
+    values: dict = dict(
         whisper_device="cpu",
         whisper_window_seconds=0.5,
         whisper_overlap_seconds=0.1,
@@ -55,6 +56,8 @@ def make_test_settings() -> Settings:
         echo_suppression_mic_delay_ms=0,
         whisper_hotwords_file=None,
     )
+    values.update(overrides)
+    return Settings(**values)
 
 
 @pytest.fixture()
@@ -63,5 +66,18 @@ def fake_engine() -> FakeTranscriptionEngine:
 
 
 @pytest.fixture()
-def client(fake_engine: FakeTranscriptionEngine) -> TestClient:
-    return TestClient(create_app(settings=make_test_settings(), engine=fake_engine))
+def metrics_registry() -> LatencyMetricsRegistry:
+    return LatencyMetricsRegistry()
+
+
+@pytest.fixture()
+def client(
+    fake_engine: FakeTranscriptionEngine, metrics_registry: LatencyMetricsRegistry
+) -> TestClient:
+    return TestClient(
+        create_app(
+            settings=make_test_settings(),
+            engine=fake_engine,
+            metrics_registry=metrics_registry,
+        )
+    )
