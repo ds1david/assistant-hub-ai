@@ -5,6 +5,7 @@ recordings/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-transcription/
 target/
 .gradle/
 .idea/
