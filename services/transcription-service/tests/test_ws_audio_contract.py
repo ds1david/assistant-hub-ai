@@ -31,6 +31,13 @@ def test_rejects_invalid_source_type(client) -> None:
     assert excinfo.value.code == 1008
 
 
+def test_rejects_missing_source_type(client) -> None:
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect("/ws/audio/sess-a/mic-1"):
+            pass
+    assert excinfo.value.code == 1008
+
+
 def test_rejects_non_integer_device_index(client) -> None:
     with pytest.raises(WebSocketDisconnect) as excinfo:
         with client.websocket_connect(
@@ -100,6 +107,20 @@ def test_microphone_duplicate_of_system_is_suppressed(client, fake_model) -> Non
     VALIDATOR.validate(mic_event)
     assert mic_event["text"] == "fala local diferente agora"
     assert mic_event["sourceType"] == "microphone"
+
+
+def test_contract_fails_when_metadata_is_lost(client, fake_model) -> None:
+    fake_model.script("evento completo")
+    with client.websocket_connect(
+        "/ws/audio/sess-meta/mic-1?sourceType=microphone&deviceIndex=3&deviceName=Headset"
+    ) as ws:
+        ws.send_bytes(WINDOW)
+        event = ws.receive_json()
+
+    VALIDATOR.validate(event)
+    for metadata_field in ("sessionId", "channelId", "sourceType", "device", "label"):
+        stripped = {key: value for key, value in event.items() if key != metadata_field}
+        assert not VALIDATOR.is_valid(stripped), f"schema aceitou evento sem {metadata_field}"
 
 
 def test_microphone_local_speech_is_delivered(client, fake_model) -> None:

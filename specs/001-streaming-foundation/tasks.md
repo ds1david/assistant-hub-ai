@@ -13,7 +13,7 @@
 - [x] SF-011 Adicionar `list-devices --json` e `probe`.
 - [x] SF-012 Publicar eventos de transcrição v2 com dispositivo e `channelId`.
 - [x] SF-013 Tornar o dashboard dinâmico por canal.
-- [ ] SF-014 Adicionar testes de contrato end-to-end com áudio sintético.
+- [x] SF-014 Adicionar testes de contrato end-to-end com áudio sintético.
 - [ ] SF-015 Executar matriz manual com conference cam, Bluetooth e microfone USB.
 - [ ] SF-016 Medir p50/p95 por canal e ajustar tamanho de janela.
 - [ ] SF-017 Consolidar texto e reduzir duplicações.
