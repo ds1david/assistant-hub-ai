@@ -31,6 +31,13 @@ def test_rejects_invalid_source_type(client) -> None:
     assert excinfo.value.code == 1008
 
 
+def test_rejects_missing_source_type(client) -> None:
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect("/ws/audio/sess-a/mic-1"):
+            pass
+    assert excinfo.value.code == 1008
+
+
 def test_rejects_non_integer_device_index(client) -> None:
     with pytest.raises(WebSocketDisconnect) as excinfo:
         with client.websocket_connect(
@@ -40,8 +47,8 @@ def test_rejects_non_integer_device_index(client) -> None:
     assert excinfo.value.code == 1008
 
 
-def test_system_channel_event_matches_contract_v2(client, fake_model) -> None:
-    fake_model.script("ola do sistema")
+def test_system_channel_event_matches_contract_v2(client, fake_engine) -> None:
+    fake_engine.script("ola do sistema")
     url = (
         "/ws/audio/sess-1/system-main"
         "?sourceType=system&label=Loopback%20Speakers&deviceIndex=7&deviceName=Alto-falantes"
@@ -61,8 +68,59 @@ def test_system_channel_event_matches_contract_v2(client, fake_model) -> None:
     assert event["droppedWindows"] == 0
 
 
-def test_event_reaches_transcript_feed(client, fake_model) -> None:
-    fake_model.script("evento no feed")
+def test_microphone_channel_event_matches_contract_v2(client, fake_engine) -> None:
+    fake_engine.script("ola do microfone")
+    url = (
+        "/ws/audio/sess-mic/mic-1"
+        "?sourceType=microphone&label=Headset%20Mic&deviceIndex=2&deviceName=Microfone%20USB"
+    )
+    with client.websocket_connect(url) as ws:
+        ws.send_bytes(WINDOW)
+        event = ws.receive_json()
+
+    VALIDATOR.validate(event)
+    assert event["type"] == "transcript.partial.v2"
+    assert event["sessionId"] == "sess-mic"
+    assert event["channelId"] == "mic-1"
+    assert event["label"] == "Headset Mic"
+    assert event["sourceType"] == "microphone"
+    assert event["device"] == {"index": 2, "name": "Microfone USB"}
+    assert event["text"] == "ola do microfone"
+    assert event["droppedWindows"] == 0
+
+
+def test_simultaneous_microphone_and_system_channels(client, fake_engine) -> None:
+    fake_engine.script("audio da reuniao", "pergunta do usuario")
+    system_url = (
+        "/ws/audio/sess-multi/system-main"
+        "?sourceType=system&label=Speakers&deviceIndex=7&deviceName=Alto-falantes"
+    )
+    microphone_url = (
+        "/ws/audio/sess-multi/mic-1"
+        "?sourceType=microphone&label=Headset&deviceIndex=2&deviceName=Microfone"
+    )
+    with client.websocket_connect(system_url) as system_ws:
+        with client.websocket_connect(microphone_url) as mic_ws:
+            system_ws.send_bytes(WINDOW)
+            system_event = system_ws.receive_json()
+            mic_ws.send_bytes(WINDOW)
+            mic_event = mic_ws.receive_json()
+
+    VALIDATOR.validate(system_event)
+    VALIDATOR.validate(mic_event)
+    assert system_event["sessionId"] == mic_event["sessionId"] == "sess-multi"
+    assert system_event["channelId"] == "system-main"
+    assert system_event["sourceType"] == "system"
+    assert system_event["device"] == {"index": 7, "name": "Alto-falantes"}
+    assert system_event["text"] == "audio da reuniao"
+    assert mic_event["channelId"] == "mic-1"
+    assert mic_event["sourceType"] == "microphone"
+    assert mic_event["device"] == {"index": 2, "name": "Microfone"}
+    assert mic_event["text"] == "pergunta do usuario"
+
+
+def test_event_reaches_transcript_feed(client, fake_engine) -> None:
+    fake_engine.script("evento no feed")
     with client.websocket_connect("/ws/transcripts") as feed:
         with client.websocket_connect(
             "/ws/audio/sess-2/system-main?sourceType=system"
@@ -75,8 +133,8 @@ def test_event_reaches_transcript_feed(client, fake_model) -> None:
     assert feed_event == direct
 
 
-def test_microphone_duplicate_of_system_is_suppressed(client, fake_model) -> None:
-    fake_model.script(
+def test_microphone_duplicate_of_system_is_suppressed(client, fake_engine) -> None:
+    fake_engine.script(
         "reuniao comeca as dez",
         "reuniao comeca as dez",
         "fala local diferente agora",
@@ -102,8 +160,22 @@ def test_microphone_duplicate_of_system_is_suppressed(client, fake_model) -> Non
     assert mic_event["sourceType"] == "microphone"
 
 
-def test_microphone_local_speech_is_delivered(client, fake_model) -> None:
-    fake_model.script("contexto vindo do sistema", "assunto totalmente diferente")
+def test_contract_fails_when_metadata_is_lost(client, fake_engine) -> None:
+    fake_engine.script("evento completo")
+    with client.websocket_connect(
+        "/ws/audio/sess-meta/mic-1?sourceType=microphone&deviceIndex=3&deviceName=Headset"
+    ) as ws:
+        ws.send_bytes(WINDOW)
+        event = ws.receive_json()
+
+    VALIDATOR.validate(event)
+    for metadata_field in ("sessionId", "channelId", "sourceType", "device", "label"):
+        stripped = {key: value for key, value in event.items() if key != metadata_field}
+        assert not VALIDATOR.is_valid(stripped), f"schema aceitou evento sem {metadata_field}"
+
+
+def test_microphone_local_speech_is_delivered(client, fake_engine) -> None:
+    fake_engine.script("contexto vindo do sistema", "assunto totalmente diferente")
     with client.websocket_connect(
         "/ws/audio/sess-local/system-main?sourceType=system"
     ) as system_ws:
