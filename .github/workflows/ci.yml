@@ -28,11 +28,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: services/transcription-service/requirements.txt
+          cache-dependency-path: |
+            services/transcription-service/requirements.txt
+            services/transcription-service/requirements-dev.txt
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r services/transcription-service/requirements.txt
+      - run: python -m pip install -r services/transcription-service/requirements-dev.txt
       - run: python -m compileall services/transcription-service/app
-      - run: python -m pip install pytest
       - run: PYTHONPATH=services/transcription-service pytest -q services/transcription-service/tests
       - name: Import smoke test
         run: |
