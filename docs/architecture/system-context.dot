@@ -1,0 +1,20 @@
+digraph G {
+  graph [bgcolor="white", pad="0.4", rankdir=LR, nodesep="0.5", ranksep="0.8"];
+  node [shape=box, style="rounded,filled", fillcolor="#f3f5f7", color="#4b5563", fontname="Arial", margin="0.15"];
+  edge [color="#667085", fontname="Arial", fontsize=10];
+  user [label="Usuário"];
+  people [label="Participantes"];
+  call [label="Meet / Teams / Zoom\nou mídia local"];
+  hub [label="Assistant Hub AI", fillcolor="#dbeafe", penwidth=2];
+  storage [label="Armazenamento local", shape=cylinder];
+  stt [label="STT local ou remoto"];
+  llm [label="Provedores LLM opcionais"];
+  ext [label="Integrações futuras"];
+  user -> hub;
+  people -> call;
+  call -> hub;
+  hub -> storage;
+  hub -> stt;
+  hub -> llm;
+  hub -> ext;
+}

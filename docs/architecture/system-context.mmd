@@ -1,0 +1,8 @@
+flowchart LR
+    U[Usuário] --> AH[Assistant Hub AI]
+    P[Participantes da conversa] --> VC[Meet / Teams / Zoom / mídia local]
+    VC --> AH
+    AH --> LOCAL[(Armazenamento local)]
+    AH --> LLM[Provedores LLM opcionais]
+    AH --> STT[Provedor STT local ou remoto]
+    AH --> EXT[Integrações futuras]

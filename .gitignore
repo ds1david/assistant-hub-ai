@@ -1,0 +1,24 @@
+.env
+.env.local
+*.wav
+recordings/
+__pycache__/
+*.py[cod]
+.venv/
+target/
+.gradle/
+.idea/
+.vscode/*.log
+.DS_Store
+
+# AI provider local configuration and secrets
+config/ai-providers.yaml
+config/ai-providers.local.yaml
+*.secrets.yaml
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/

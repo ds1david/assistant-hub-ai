@@ -1,0 +1,20 @@
+id: product-refinement
+name: Refinamento de produto
+version: 1
+plugins:
+  - audio-capture-windows
+  - stt-faster-whisper
+  - decision-extractor
+  - action-item-extractor
+  - transcript-store
+personas:
+  - id: product-owner
+    goal: explicitar valor, escopo e critérios de aceite
+  - id: technical-lead
+    goal: apontar riscos, dependências e decisões arquiteturais
+  - id: facilitator
+    goal: identificar pendências e responsáveis
+policies:
+  responseStyle: concise
+  storeAudio: true
+  remoteProvidersAllowed: false

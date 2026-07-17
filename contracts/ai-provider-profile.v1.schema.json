@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assistant-hub-ai.local/contracts/ai-provider-profile.v1.schema.json",
+  "title": "Assistant Hub AI provider profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "providers", "routes"],
+  "properties": {
+    "version": { "const": 1 },
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/provider" }
+    },
+    "routes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/route" }
+    }
+  },
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "enabled", "baseUrl", "authentication", "defaults", "capabilities"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "type": {
+          "type": "string",
+          "enum": ["openai-compatible", "anthropic", "gemini", "custom-http"]
+        },
+        "enabled": { "type": "boolean" },
+        "baseUrl": { "type": "string", "format": "uri" },
+        "authentication": { "$ref": "#/$defs/authentication" },
+        "defaults": { "$ref": "#/$defs/defaults" },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["chat", "responses", "embeddings", "vision", "audio-input", "tool-calling", "structured-output", "streaming"]
+          }
+        }
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["none", "bearer", "api-key"] },
+        "secretRef": {
+          "type": "string",
+          "pattern": "^(env|os):[A-Za-z0-9_./-]+$"
+        },
+        "headerName": { "type": "string", "minLength": 1, "maxLength": 80 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "none" } } },
+          "then": { "not": { "required": ["secretRef"] } },
+          "else": { "required": ["secretRef"] }
+        }
+      ]
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "timeoutMs"],
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "topP": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "maxTokens": { "type": "integer", "minimum": 1 },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 600000 }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary"],
+      "properties": {
+        "primary": { "type": "string" },
+        "fallbacks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

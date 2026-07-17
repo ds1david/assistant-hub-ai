@@ -1,0 +1,23 @@
+# Tarefas — Streaming Foundation
+
+- [x] SF-001 Criar monorepo, visão e ADRs.
+- [x] SF-002 Criar serviço FastAPI e health check.
+- [x] SF-003 Implementar WebSocket de áudio.
+- [x] SF-004 Integrar faster-whisper com janela sobreposta.
+- [x] SF-005 Criar dashboard de transcrição.
+- [x] SF-006 Criar agente Windows com microfone e WASAPI loopback.
+- [x] SF-007 Adicionar gravação WAV opcional.
+- [x] SF-008 Adicionar endpoint de transcrição de arquivo.
+- [x] SF-009 Documentar desenvolvimento WSL-first e adicionar `CLAUDE.md`.
+- [x] SF-010 Adicionar perfis multicanal de áudio.
+- [x] SF-011 Adicionar `list-devices --json` e `probe`.
+- [x] SF-012 Publicar eventos de transcrição v2 com dispositivo e `channelId`.
+- [x] SF-013 Tornar o dashboard dinâmico por canal.
+- [ ] SF-014 Adicionar testes de contrato end-to-end com áudio sintético.
+- [ ] SF-015 Executar matriz manual com conference cam, Bluetooth e microfone USB.
+- [ ] SF-016 Medir p50/p95 por canal e ajustar tamanho de janela.
+- [ ] SF-017 Consolidar texto e reduzir duplicações.
+- [ ] SF-018 Implementar identidade persistente com MMDevice endpoint ID.
+- [ ] SF-019 Implementar listener de hot-plug nativo.
+- [ ] SF-020 Avaliar plugin de captura por processo/aplicativo.
+- [ ] SF-021 Publicar eventos v2 no session-core.

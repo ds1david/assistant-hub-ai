@@ -1,0 +1,20 @@
+version: 1
+name: bluetooth-output-usb-microphone
+server: ws://127.0.0.1:8001
+channels:
+  - id: local_usb_microphone
+    label: Microfone USB local
+    kind: input
+    device:
+      nameRegex: "USB|Conference|Microphone|Microfone"
+    processing:
+      gainDb: 0
+      noiseGateDb: -44
+
+  - id: remote_bluetooth_audio
+    label: Áudio remoto no fone Bluetooth
+    kind: loopback
+    device:
+      nameRegex: "Bluetooth|Headphones|Stereo.*(Loopback|loopback)"
+    processing:
+      gainDb: 0

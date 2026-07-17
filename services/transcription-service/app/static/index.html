@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assistant Hub AI — Streaming Foundation</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #101215; color: #f4f6f8; }
+    header { padding: 20px 28px; border-bottom: 1px solid #2b3038; display:flex; justify-content:space-between; align-items:center; }
+    h1 { margin: 0; font-size: 20px; }
+    #status { font-size: 13px; color: #aab2bd; }
+    main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; padding: 22px; }
+    section { background: #171a1f; border: 1px solid #2b3038; border-radius: 12px; min-height: 55vh; overflow: hidden; }
+    section h2 { margin: 0; padding: 14px 16px 4px; font-size: 15px; }
+    .device { padding: 0 16px 12px; border-bottom: 1px solid #2b3038; color: #929ca8; font-size: 11px; }
+    .feed { padding: 10px 14px; max-height: 62vh; overflow-y: auto; }
+    .entry { padding: 10px 0; border-bottom: 1px solid #252a31; }
+    .meta { color: #929ca8; font-size: 11px; margin-bottom: 4px; }
+    .text { line-height: 1.45; }
+    .empty { color: #7d8793; padding: 18px 0; }
+    #waiting { margin: 22px; padding: 22px; border: 1px dashed #3a414b; border-radius: 12px; color: #8c96a2; }
+    footer { padding: 0 22px 22px; color: #8c96a2; font-size: 12px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Assistant Hub AI · Streaming Foundation</h1>
+  <span id="status">conectando…</span>
+</header>
+<div id="waiting">Aguardando canais de áudio. Inicie o agente Windows com um perfil.</div>
+<main id="channels"></main>
+<footer>Cada painel representa um endpoint Windows independente. Fontes que compartilham o mesmo dispositivo de saída continuam misturadas no loopback desse endpoint.</footer>
+<script>
+  const statusEl = document.getElementById('status');
+  const channelsEl = document.getElementById('channels');
+  const waitingEl = document.getElementById('waiting');
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  let retry;
+
+  function safeId(value) {
+    return `channel-${value.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  }
+
+  function ensureChannel(data) {
+    const id = safeId(data.channelId);
+    let section = document.getElementById(id);
+    if (section) return section.querySelector('.feed');
+
+    waitingEl.hidden = true;
+    section = document.createElement('section');
+    section.id = id;
+    const deviceName = data.device?.name || 'dispositivo não informado';
+    const source = data.sourceType === 'microphone' ? 'entrada' : 'loopback de saída';
+    section.innerHTML = `
+      <h2></h2>
+      <div class="device"></div>
+      <div class="feed"><div class="empty">Aguardando transcrição.</div></div>`;
+    section.querySelector('h2').textContent = data.label || data.channelId;
+    section.querySelector('.device').textContent = `${data.channelId} · ${source} · ${deviceName}`;
+    channelsEl.appendChild(section);
+    return section.querySelector('.feed');
+  }
+
+  function connect() {
+    const ws = new WebSocket(`${protocol}://${location.host}/ws/transcripts`);
+    ws.onopen = () => { statusEl.textContent = 'conectado'; clearTimeout(retry); };
+    ws.onclose = () => { statusEl.textContent = 'reconectando…'; retry = setTimeout(connect, 1500); };
+    ws.onerror = () => ws.close();
+    ws.onmessage = event => {
+      const data = JSON.parse(event.data);
+      const target = ensureChannel(data);
+      target.querySelector('.empty')?.remove();
+      const item = document.createElement('div');
+      item.className = 'entry';
+      const time = new Date(data.occurredAt).toLocaleTimeString();
+      item.innerHTML = `<div class="meta">${time} · ${data.latencyMs} ms · ${data.type}</div><div class="text"></div>`;
+      item.querySelector('.text').textContent = data.text;
+      target.prepend(item);
+      while (target.children.length > 100) target.lastElementChild.remove();
+    };
+  }
+  connect();
+</script>
+</body>
+</html>

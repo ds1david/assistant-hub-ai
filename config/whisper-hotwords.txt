@@ -1,0 +1,13 @@
+# Uma expressão por linha. Ajuste este arquivo ao vocabulário da sessão.
+cassetada
+Java
+Spring Boot
+Spring Cloud
+Maven
+Gradle
+Kafka
+Kubernetes
+Docker
+WSL
+Mercado Livre
+FedEx

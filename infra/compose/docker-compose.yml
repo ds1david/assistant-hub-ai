@@ -1,0 +1,39 @@
+services:
+  transcription:
+    build:
+      context: services/transcription-service
+    container_name: assistant-hub-transcription
+    ports:
+      - "8001:8001"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-pt}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-5}
+      WHISPER_PATIENCE: ${WHISPER_PATIENCE:-1.0}
+      WHISPER_TEMPERATURE: ${WHISPER_TEMPERATURE:-0.0}
+      WHISPER_REPETITION_PENALTY: ${WHISPER_REPETITION_PENALTY:-1.05}
+      WHISPER_NO_SPEECH_THRESHOLD: ${WHISPER_NO_SPEECH_THRESHOLD:-0.55}
+      WHISPER_INITIAL_PROMPT: ${WHISPER_INITIAL_PROMPT:-Transcrição em português do Brasil. Preserve termos técnicos, nomes próprios, siglas, gírias e palavras coloquiais exatamente como foram pronunciadas.}
+      WHISPER_HOTWORDS: ${WHISPER_HOTWORDS:-}
+      WHISPER_HOTWORDS_FILE: ${WHISPER_HOTWORDS_FILE:-/config/whisper-hotwords.txt}
+      WHISPER_WINDOW_SECONDS: ${WHISPER_WINDOW_SECONDS:-3.2}
+      WHISPER_OVERLAP_SECONDS: ${WHISPER_OVERLAP_SECONDS:-0.8}
+      WHISPER_MIN_AUDIO_SECONDS: ${WHISPER_MIN_AUDIO_SECONDS:-0.8}
+      WHISPER_VAD_MIN_SILENCE_MS: ${WHISPER_VAD_MIN_SILENCE_MS:-350}
+      ECHO_SUPPRESSION_ENABLED: ${ECHO_SUPPRESSION_ENABLED:-true}
+      ECHO_SUPPRESSION_WINDOW_SECONDS: ${ECHO_SUPPRESSION_WINDOW_SECONDS:-5.0}
+      ECHO_SUPPRESSION_SIMILARITY: ${ECHO_SUPPRESSION_SIMILARITY:-0.82}
+      ECHO_SUPPRESSION_MIN_CHARS: ${ECHO_SUPPRESSION_MIN_CHARS:-5}
+      ECHO_SUPPRESSION_MIC_DELAY_MS: ${ECHO_SUPPRESSION_MIC_DELAY_MS:-450}
+      MODEL_CACHE_DIR: /models
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - whisper-models:/models
+      - ./config:/config:ro
+    restart: unless-stopped
+
+volumes:
+  whisper-models:

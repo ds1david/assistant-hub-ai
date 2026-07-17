@@ -1,0 +1,27 @@
+flowchart LR
+    subgraph Windows Host
+      DEVICES[Endpoints de áudio\nUSB · Conference Cam · Bluetooth]
+      CAP[Windows Audio Agent\nPerfis + WASAPI]
+      UI[Web Console]
+    end
+
+    subgraph WSL2 Development
+      IDE[VS Code WSL + Claude Code]
+      REPO[Git workspace\nJava + Python + docs]
+    end
+
+    subgraph Docker / WSL2 Runtime
+      STT[Transcription Service\nFastAPI + faster-whisper]
+      CORE[Session Core\nJava 21 + Spring Boot]
+      DB[(Session Store futuro)]
+    end
+
+    DEVICES -- fluxos independentes --> CAP
+    CAP -- PCM 16 kHz\nWebSocket por channelId --> STT
+    STT -- eventos v2 por canal --> UI
+    IDE --> REPO
+    REPO -. build / compose .-> STT
+    REPO -. build / compose .-> CORE
+    STT -. próximo incremento .-> CORE
+    CORE --> DB
+    CORE -. plugin SPI .-> PLUGINS[Plugins de IA, memória,\nanálise e captura visual]

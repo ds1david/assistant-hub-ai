@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant Remote as Áudio remoto / chamada
+    participant Local as Microfone selecionado
+    participant Agent as Windows Audio Agent
+    participant STT as Transcription Service no WSL/Docker
+    participant UI as Web Console
+    participant Core as Session Core (R2)
+
+    Remote->>Agent: loopback do endpoint selecionado
+    Local->>Agent: entrada do endpoint selecionado
+    Agent->>Agent: resolve perfil e atribui channelId
+    Agent->>Agent: converte cada canal para PCM mono 16 kHz
+    par canal remote_audio
+      Agent->>STT: /ws/audio/{session}/remote_audio + metadados
+    and canal local_microphone
+      Agent->>STT: /ws/audio/{session}/local_microphone + metadados
+    end
+    STT->>STT: janela sobreposta + VAD + inferência independente
+    STT-->>UI: transcript.partial.v2 por channelId
+    STT-. R2 .->>Core: SessionEvent com origem preservada
+    Core-. R2 .->>UI: contexto consolidado e sugestões

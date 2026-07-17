@@ -1,0 +1,22 @@
+version: 1
+name: default-windows-devices
+server: ws://127.0.0.1:8001
+channels:
+  - id: local_microphone
+    label: Minha voz
+    kind: input
+    device:
+      default: true
+    processing:
+      gainDb: 0
+      # Reduza para -42 se sua voz estiver sendo cortada; aumente para -34
+      # se a conference cam ainda captar muito áudio dos alto-falantes.
+      noiseGateDb: -38
+
+  - id: remote_audio
+    label: Áudio remoto
+    kind: loopback
+    device:
+      default: true
+    processing:
+      gainDb: 0

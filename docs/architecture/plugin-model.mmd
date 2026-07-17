@@ -1,0 +1,20 @@
+flowchart TB
+    PROFILE[Conversation Profile] --> REGISTRY[Plugin Registry]
+    SDK[Plugin SDK] --> CAPTURE[Capture Plugins]
+    SDK --> STT[STT Plugins]
+    SDK --> ANALYSIS[Analysis Plugins]
+    SDK --> LLM[LLM Provider Plugins]
+    SDK --> MEMORY[Memory Plugins]
+    SDK --> OUTPUT[Output Plugins]
+    REGISTRY --> CAPTURE
+    REGISTRY --> STT
+    REGISTRY --> ANALYSIS
+    REGISTRY --> LLM
+    REGISTRY --> MEMORY
+    REGISTRY --> OUTPUT
+    CAPTURE --> BUS[Session Event Bus]
+    STT --> BUS
+    ANALYSIS --> BUS
+    LLM --> BUS
+    MEMORY --> BUS
+    BUS --> OUTPUT

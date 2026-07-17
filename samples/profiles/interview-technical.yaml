@@ -1,0 +1,18 @@
+id: interview-technical
+name: Entrevista técnica
+version: 1
+plugins:
+  - audio-capture-windows
+  - stt-faster-whisper
+  - turn-detector
+  - llm-provider
+  - transcript-store
+personas:
+  - id: technical-interviewer
+    goal: avaliar profundidade técnica, decisões e trade-offs
+  - id: answer-coach
+    goal: sugerir estrutura objetiva e pontos de aprofundamento
+policies:
+  responseStyle: bullet-points
+  storeAudio: true
+  remoteProvidersAllowed: false

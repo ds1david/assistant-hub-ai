@@ -1,0 +1,37 @@
+digraph G {
+  graph [bgcolor="white", pad="0.4", rankdir=LR, nodesep="0.5", ranksep="0.9", compound=true];
+  node [shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#475467", fontname="Arial", margin="0.16"];
+  edge [color="#667085", fontname="Arial", fontsize=10];
+
+  subgraph cluster_windows {
+    label="Windows Host"; color="#98a2b3"; style="rounded";
+    devices [label="Audio Endpoints\nUSB / Conference Cam / Bluetooth", fillcolor="#fce7f3"];
+    cap [label="Windows Audio Agent\nProfiles + WASAPI", fillcolor="#dbeafe"];
+    ui [label="Web Console", fillcolor="#dcfce7"];
+    devices -> cap [label="independent streams"];
+  }
+
+  subgraph cluster_wsl_dev {
+    label="WSL 2 Development"; color="#98a2b3"; style="rounded";
+    ide [label="VS Code WSL\nClaude Code", fillcolor="#e0f2fe"];
+    repo [label="Git Workspace\nJava + Python + Docs", fillcolor="#f3f4f6"];
+    ide -> repo;
+  }
+
+  subgraph cluster_docker {
+    label="Docker / WSL 2 Runtime"; color="#98a2b3"; style="rounded";
+    stt [label="Transcription Service\nFastAPI + faster-whisper", fillcolor="#fef3c7"];
+    core [label="Session Core\nJava 21 + Spring Boot", fillcolor="#ede9fe"];
+    store [label="Session Store future", shape=cylinder, fillcolor="#fce7f3"];
+  }
+
+  plugins [label="AI, memory, analysis\nand visual capture plugins", fillcolor="#f3f4f6"];
+
+  cap -> stt [label="PCM 16 kHz\nWebSocket / channelId"];
+  stt -> ui [label="transcript v2 events"];
+  repo -> stt [label="build / compose", style=dashed];
+  repo -> core [label="build / compose", style=dashed];
+  stt -> core [label="R2", style=dashed];
+  core -> store;
+  core -> plugins [label="Plugin SPI", style=dashed];
+}

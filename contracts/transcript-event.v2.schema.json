@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assistanthub.ai/schemas/transcript-event.v2.schema.json",
+  "title": "Assistant Hub transcript event v2",
+  "type": "object",
+  "required": [
+    "type",
+    "sessionId",
+    "channelId",
+    "label",
+    "sourceType",
+    "device",
+    "text",
+    "latencyMs",
+    "occurredAt"
+  ],
+  "properties": {
+    "type": {"enum": ["transcript.partial.v2", "transcript.final.v2"]},
+    "sessionId": {"type": "string", "minLength": 1},
+    "channelId": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$"
+    },
+    "label": {"type": "string", "minLength": 1},
+    "sourceType": {"enum": ["system", "microphone"]},
+    "device": {
+      "type": "object",
+      "required": ["index", "name"],
+      "properties": {
+        "index": {"type": ["integer", "null"]},
+        "name": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "text": {"type": "string"},
+    "language": {"type": ["string", "null"]},
+    "languageProbability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "latencyMs": {"type": "integer", "minimum": 0},
+    "audioSeconds": {"type": "number", "minimum": 0},
+    "droppedWindows": {"type": "integer", "minimum": 0},
+    "occurredAt": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

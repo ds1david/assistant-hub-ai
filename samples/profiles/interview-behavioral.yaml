@@ -1,0 +1,18 @@
+id: interview-behavioral
+name: Entrevista comportamental
+version: 1
+plugins:
+  - audio-capture-windows
+  - stt-faster-whisper
+  - turn-detector
+  - llm-provider
+  - transcript-store
+personas:
+  - id: recruiter
+    goal: avaliar comunicação, colaboração e impacto
+  - id: star-coach
+    goal: organizar respostas em situação, tarefa, ação e resultado
+policies:
+  responseStyle: star-outline
+  storeAudio: true
+  remoteProvidersAllowed: false

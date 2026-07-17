@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "assistant-hub-audio"
+version = "0.1.6"
+description = "Windows microphone and WASAPI loopback capture agent for Assistant Hub AI"
+requires-python = ">=3.11"
+dependencies = [
+  "PyAudioWPatch>=0.2.12.7",
+  "numpy>=2,<3",
+  "scipy>=1.14,<2",
+  "websockets>=14,<16",
+  "PyYAML>=6,<7",
+]
+
+[project.scripts]
+assistant-hub-audio = "assistant_hub_audio.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
