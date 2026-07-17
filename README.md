@@ -180,7 +180,10 @@ Evite chamar diretamente `docker compose -f infra/compose/...`, pois nesse forma
 ```text
 http://localhost:8001
 http://localhost:8001/health
+http://localhost:8001/v1/sessions/<sessionId>/metrics
 ```
+
+O endpoint de métricas reporta, por canal da sessão, latência p50/p95 (nearest-rank sobre um ring buffer em memória), `sampleCount`, `totalEvents` e `droppedWindows`. O dashboard exibe p50, p95 e amostras em cada painel, atualizados a cada 5 s. A retenção é configurável por `METRICS_MAX_SAMPLES_PER_CHANNEL` e `METRICS_MAX_CHANNELS`; nada é persistido.
 
 ## Qualidade de transcrição
 

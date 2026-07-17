@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     echo_suppression_min_chars: int = 5
     echo_suppression_mic_delay_ms: int = 450
 
+    # Retenção das métricas de latência em memória (SF-016).
+    metrics_max_samples_per_channel: int = 512
+    metrics_max_channels: int = 64
+
     model_cache_dir: Path = Path("/models")
     sample_rate: int = 16_000
     log_level: str = "INFO"

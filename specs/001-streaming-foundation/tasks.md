@@ -15,9 +15,10 @@
 - [x] SF-013 Tornar o dashboard dinâmico por canal.
 - [x] SF-014 Adicionar testes de contrato end-to-end com áudio sintético.
 - [ ] SF-015 Executar matriz manual com conference cam, Bluetooth e microfone USB.
-- [ ] SF-016 Medir p50/p95 por canal e ajustar tamanho de janela.
+- [x] SF-016 Medir p50/p95 por canal via registry em memória e `GET /v1/sessions/{sessionId}/metrics`.
 - [ ] SF-017 Consolidar texto e reduzir duplicações.
 - [ ] SF-018 Implementar identidade persistente com MMDevice endpoint ID.
 - [ ] SF-019 Implementar listener de hot-plug nativo.
 - [ ] SF-020 Avaliar plugin de captura por processo/aplicativo.
 - [ ] SF-021 Publicar eventos v2 no session-core.
+- [ ] SF-022 Ajustar tamanho de janela com base nas métricas p50/p95 coletadas na SF-016.

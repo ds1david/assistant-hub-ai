@@ -13,6 +13,7 @@ from .broadcast import TranscriptBroadcaster
 from .config import Settings, get_settings
 from .echo_suppression import TranscriptEchoSuppressor
 from .engine import TranscriptionEngine
+from .metrics import LatencyMetricsRegistry
 from .transcriber import StreamingTranscriber, WhisperEngine, transcribe_file
 
 LOGGER = logging.getLogger(__name__)
@@ -22,9 +23,14 @@ STATIC_INDEX = Path(__file__).with_name("static") / "index.html"
 def create_app(
     settings: Settings | None = None,
     engine: TranscriptionEngine | None = None,
+    metrics_registry: LatencyMetricsRegistry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     engine = engine or WhisperEngine(settings)
+    metrics = metrics_registry or LatencyMetricsRegistry(
+        max_samples_per_channel=settings.metrics_max_samples_per_channel,
+        max_channels=settings.metrics_max_channels,
+    )
     logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 
     broadcaster = TranscriptBroadcaster()
@@ -34,7 +40,7 @@ def create_app(
         similarity_threshold=settings.echo_suppression_similarity,
         min_chars=settings.echo_suppression_min_chars,
     )
-    app = FastAPI(title="Assistant Hub AI Transcription Service", version="0.1.6")
+    app = FastAPI(title="Assistant Hub AI Transcription Service", version="0.1.7")
 
     @app.get("/")
     async def dashboard() -> FileResponse:
@@ -147,6 +153,16 @@ def create_app(
             }
             await websocket.send_json(event)
             await broadcaster.publish(event)
+            # Ponto único de registro: uma amostra por evento entregue. O
+            # fan-out do broadcaster repete o mesmo evento por cliente e não
+            # deve contar.
+            metrics.record_transcription(
+                session_id=session_id,
+                channel_id=channel_id,
+                source_type=source_type,
+                label=label,
+                latency_ms=result.latency_ms,
+            )
 
         async def worker() -> None:
             while True:
@@ -168,6 +184,9 @@ def create_app(
                     windows.get_nowait()
                     windows.task_done()
                     dropped_windows += 1
+                    metrics.record_dropped_window(
+                        session_id=session_id, channel_id=channel_id
+                    )
                 except asyncio.QueueEmpty:
                     pass
             windows.put_nowait((window, final))
@@ -196,6 +215,34 @@ def create_app(
                 channel_id,
                 dropped_windows,
             )
+
+    @app.get("/v1/sessions/{session_id}/metrics")
+    async def session_metrics(session_id: str) -> dict:
+        snapshot = metrics.session_snapshot(session_id)
+        return {
+            "sessionId": snapshot.session_id,
+            "generatedAt": snapshot.generated_at.isoformat(),
+            "maxSamplesPerChannel": metrics.max_samples_per_channel,
+            "channels": [
+                {
+                    "channelId": channel.channel_id,
+                    "sourceType": channel.source_type,
+                    "label": channel.label,
+                    "sampleCount": channel.sample_count,
+                    "p50Ms": channel.p50_ms,
+                    "p95Ms": channel.p95_ms,
+                    "minMs": channel.min_ms,
+                    "maxMs": channel.max_ms,
+                    "avgMs": channel.avg_ms,
+                    "totalEvents": channel.total_events,
+                    "droppedWindows": channel.dropped_windows,
+                    "lastEventAt": (
+                        channel.last_event_at.isoformat() if channel.last_event_at else None
+                    ),
+                }
+                for channel in snapshot.channels
+            ],
+        }
 
     @app.post("/v1/transcribe-file")
     async def transcribe_uploaded_file(
