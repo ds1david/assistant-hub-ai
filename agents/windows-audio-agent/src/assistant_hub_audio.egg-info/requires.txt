@@ -1,0 +1,5 @@
+PyAudioWPatch>=0.2.12.7
+numpy<3,>=2
+scipy<2,>=1.14
+websockets<16,>=14
+PyYAML<7,>=6

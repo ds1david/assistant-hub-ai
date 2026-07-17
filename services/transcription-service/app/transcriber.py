@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,11 +14,16 @@ from .config import Settings
 
 LOGGER = logging.getLogger(__name__)
 
+# Anything with the WhisperModel.transcribe(audio, **options) -> (segments, info)
+# surface; lets tests supply a fake without loading a real model.
+ModelFactory = Callable[[], WhisperModel]
+
 
 class ModelManager:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, model_factory: ModelFactory | None = None) -> None:
         self._settings = settings
         self._model: WhisperModel | None = None
+        self._model_factory = model_factory
         self._lock = threading.Lock()
 
     @property
@@ -28,6 +34,9 @@ class ModelManager:
         if self._model is None:
             with self._lock:
                 if self._model is None:
+                    if self._model_factory is not None:
+                        self._model = self._model_factory()
+                        return self._model
                     self._settings.model_cache_dir.mkdir(parents=True, exist_ok=True)
                     LOGGER.info(
                         "Loading model=%s device=%s compute_type=%s",
