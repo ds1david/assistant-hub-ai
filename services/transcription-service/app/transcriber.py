@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,19 +10,15 @@ import numpy as np
 from faster_whisper import WhisperModel
 
 from .config import Settings
+from .engine import EngineResult, EngineSegment, TranscriptionEngine
 
 LOGGER = logging.getLogger(__name__)
 
-# Anything with the WhisperModel.transcribe(audio, **options) -> (segments, info)
-# surface; lets tests supply a fake without loading a real model.
-ModelFactory = Callable[[], WhisperModel]
-
 
 class ModelManager:
-    def __init__(self, settings: Settings, model_factory: ModelFactory | None = None) -> None:
+    def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._model: WhisperModel | None = None
-        self._model_factory = model_factory
         self._lock = threading.Lock()
 
     @property
@@ -34,9 +29,6 @@ class ModelManager:
         if self._model is None:
             with self._lock:
                 if self._model is None:
-                    if self._model_factory is not None:
-                        self._model = self._model_factory()
-                        return self._model
                     self._settings.model_cache_dir.mkdir(parents=True, exist_ok=True)
                     LOGGER.info(
                         "Loading model=%s device=%s compute_type=%s",
@@ -51,15 +43,6 @@ class ModelManager:
                         download_root=str(self._settings.model_cache_dir),
                     )
         return self._model
-
-
-@dataclass(frozen=True)
-class TranscriptionResult:
-    text: str
-    language: str | None
-    language_probability: float | None
-    latency_ms: int
-    audio_seconds: float
 
 
 def _transcription_options(settings: Settings, language: str | None) -> dict:
@@ -79,10 +62,48 @@ def _transcription_options(settings: Settings, language: str | None) -> dict:
     }
 
 
-class StreamingTranscriber:
-    def __init__(self, settings: Settings, model_manager: ModelManager) -> None:
+class WhisperEngine(TranscriptionEngine):
+    """Default engine backed by faster-whisper. Lazy-loads on first use."""
+
+    def __init__(self, settings: Settings, model_manager: ModelManager | None = None) -> None:
         self._settings = settings
-        self._model_manager = model_manager
+        self._manager = model_manager or ModelManager(settings)
+
+    @property
+    def loaded(self) -> bool:
+        return self._manager.loaded
+
+    def load(self) -> None:
+        self._manager.get()
+
+    def transcribe(self, audio: np.ndarray | str, language: str | None = None) -> EngineResult:
+        segments, info = self._manager.get().transcribe(
+            audio, **_transcription_options(self._settings, language)
+        )
+        return EngineResult(
+            segments=tuple(
+                EngineSegment(text=segment.text.strip(), start=segment.start, end=segment.end)
+                for segment in segments
+                if segment.text.strip()
+            ),
+            language=getattr(info, "language", None),
+            language_probability=getattr(info, "language_probability", None),
+        )
+
+
+@dataclass(frozen=True)
+class TranscriptionResult:
+    text: str
+    language: str | None
+    language_probability: float | None
+    latency_ms: int
+    audio_seconds: float
+
+
+class StreamingTranscriber:
+    def __init__(self, settings: Settings, engine: TranscriptionEngine) -> None:
+        self._settings = settings
+        self._engine = engine
         self._buffer = bytearray()
         self._last_text = ""
 
@@ -121,9 +142,8 @@ class StreamingTranscriber:
 
         started = time.perf_counter()
         audio = np.frombuffer(pcm16, dtype=np.int16).astype(np.float32) / 32768.0
-        model = self._model_manager.get()
-        segments, info = model.transcribe(audio, **_transcription_options(self._settings, language))
-        text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
+        result = self._engine.transcribe(audio, language)
+        text = " ".join(segment.text for segment in result.segments).strip()
         latency_ms = int((time.perf_counter() - started) * 1000)
 
         if not text or text == self._last_text:
@@ -132,28 +152,24 @@ class StreamingTranscriber:
 
         return TranscriptionResult(
             text=text,
-            language=getattr(info, "language", None),
-            language_probability=getattr(info, "language_probability", None),
+            language=result.language,
+            language_probability=result.language_probability,
             latency_ms=latency_ms,
             audio_seconds=len(audio) / self._settings.sample_rate,
         )
 
 
-def transcribe_file(path: Path, settings: Settings, manager: ModelManager, language: str | None) -> dict:
+def transcribe_file(path: Path, engine: TranscriptionEngine, language: str | None) -> dict:
     started = time.perf_counter()
-    segments, info = manager.get().transcribe(
-        str(path),
-        **_transcription_options(settings, language),
-    )
+    result = engine.transcribe(str(path), language)
     text_segments = [
-        {"start": segment.start, "end": segment.end, "text": segment.text.strip()}
-        for segment in segments
-        if segment.text.strip()
+        {"start": segment.start, "end": segment.end, "text": segment.text}
+        for segment in result.segments
     ]
     return {
         "text": " ".join(item["text"] for item in text_segments),
         "segments": text_segments,
-        "language": getattr(info, "language", None),
-        "languageProbability": getattr(info, "language_probability", None),
+        "language": result.language,
+        "languageProbability": result.language_probability,
         "latencyMs": int((time.perf_counter() - started) * 1000),
     }

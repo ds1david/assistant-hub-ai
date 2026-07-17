@@ -5,29 +5,14 @@ from dataclasses import dataclass, field
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main
-from app.broadcast import TranscriptBroadcaster
 from app.config import Settings
-from app.echo_suppression import TranscriptEchoSuppressor
-from app.transcriber import ModelManager
-
-
-@dataclass(frozen=True)
-class FakeSegment:
-    text: str
-    start: float = 0.0
-    end: float = 1.0
-
-
-@dataclass(frozen=True)
-class FakeInfo:
-    language: str | None = "pt"
-    language_probability: float | None = 0.99
+from app.engine import EngineResult, EngineSegment, TranscriptionEngine
+from app.main import create_app
 
 
 @dataclass
-class FakeWhisperModel:
-    """Duck-typed stand-in for faster_whisper.WhisperModel.
+class FakeTranscriptionEngine(TranscriptionEngine):
+    """In-memory TranscriptionEngine: no model, no download, no GPU.
 
     Returns scripted texts in FIFO order, one per transcribe() call, so tests
     control exactly what each audio window "says".
@@ -35,14 +20,26 @@ class FakeWhisperModel:
 
     scripted_texts: list[str] = field(default_factory=list)
     calls: list[dict] = field(default_factory=list)
+    _loaded: bool = False
+
+    @property
+    def loaded(self) -> bool:
+        return self._loaded
+
+    def load(self) -> None:
+        self._loaded = True
 
     def script(self, *texts: str) -> None:
         self.scripted_texts.extend(texts)
 
-    def transcribe(self, audio, **options):
-        self.calls.append(options)
+    def transcribe(self, audio, language: str | None = None) -> EngineResult:
+        self.calls.append({"language": language})
         text = self.scripted_texts.pop(0) if self.scripted_texts else "transcricao sintetica"
-        return [FakeSegment(text=text)], FakeInfo()
+        return EngineResult(
+            segments=(EngineSegment(text=text, start=0.0, end=1.0),),
+            language="pt",
+            language_probability=0.99,
+        )
 
 
 def make_test_settings() -> Settings:
@@ -61,28 +58,10 @@ def make_test_settings() -> Settings:
 
 
 @pytest.fixture()
-def fake_model() -> FakeWhisperModel:
-    return FakeWhisperModel()
+def fake_engine() -> FakeTranscriptionEngine:
+    return FakeTranscriptionEngine()
 
 
 @pytest.fixture()
-def client(monkeypatch: pytest.MonkeyPatch, fake_model: FakeWhisperModel) -> TestClient:
-    test_settings = make_test_settings()
-    monkeypatch.setattr(main, "settings", test_settings)
-    monkeypatch.setattr(
-        main,
-        "model_manager",
-        ModelManager(test_settings, model_factory=lambda: fake_model),
-    )
-    monkeypatch.setattr(
-        main,
-        "echo_suppressor",
-        TranscriptEchoSuppressor(
-            enabled=test_settings.echo_suppression_enabled,
-            window_seconds=test_settings.echo_suppression_window_seconds,
-            similarity_threshold=test_settings.echo_suppression_similarity,
-            min_chars=test_settings.echo_suppression_min_chars,
-        ),
-    )
-    monkeypatch.setattr(main, "broadcaster", TranscriptBroadcaster())
-    return TestClient(main.app)
+def client(fake_engine: FakeTranscriptionEngine) -> TestClient:
+    return TestClient(create_app(settings=make_test_settings(), engine=fake_engine))
