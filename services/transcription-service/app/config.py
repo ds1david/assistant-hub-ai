@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     metrics_max_samples_per_channel: int = 512
     metrics_max_channels: int = 64
 
+    # Consolidação de texto por canal em memória (SF-017).
+    transcript_max_segments_per_channel: int = 256
+    transcript_max_channels: int = 64
+    transcript_overlap_tail_words: int = 12
+
     model_cache_dir: Path = Path("/models")
     sample_rate: int = 16_000
     log_level: str = "INFO"

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 
 from .broadcast import TranscriptBroadcaster
 from .config import Settings, get_settings
+from .consolidation import TranscriptConsolidationRegistry
 from .echo_suppression import TranscriptEchoSuppressor
 from .engine import TranscriptionEngine
 from .metrics import LatencyMetricsRegistry
@@ -24,12 +25,18 @@ def create_app(
     settings: Settings | None = None,
     engine: TranscriptionEngine | None = None,
     metrics_registry: LatencyMetricsRegistry | None = None,
+    consolidator: TranscriptConsolidationRegistry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     engine = engine or WhisperEngine(settings)
     metrics = metrics_registry or LatencyMetricsRegistry(
         max_samples_per_channel=settings.metrics_max_samples_per_channel,
         max_channels=settings.metrics_max_channels,
+    )
+    consolidator = consolidator or TranscriptConsolidationRegistry(
+        max_segments_per_channel=settings.transcript_max_segments_per_channel,
+        max_channels=settings.transcript_max_channels,
+        overlap_tail_words=settings.transcript_overlap_tail_words,
     )
     logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 
@@ -40,7 +47,7 @@ def create_app(
         similarity_threshold=settings.echo_suppression_similarity,
         min_chars=settings.echo_suppression_min_chars,
     )
-    app = FastAPI(title="Assistant Hub AI Transcription Service", version="0.1.7")
+    app = FastAPI(title="Assistant Hub AI Transcription Service", version="0.1.8")
 
     @app.get("/")
     async def dashboard() -> FileResponse:
@@ -133,6 +140,7 @@ def create_app(
                 )
                 return
 
+            occurred_at = datetime.now(timezone.utc)
             event = {
                 "type": "transcript.final.v2" if final else "transcript.partial.v2",
                 "sessionId": session_id,
@@ -149,7 +157,7 @@ def create_app(
                 "latencyMs": result.latency_ms,
                 "audioSeconds": result.audio_seconds,
                 "droppedWindows": dropped_windows,
-                "occurredAt": datetime.now(timezone.utc).isoformat(),
+                "occurredAt": occurred_at.isoformat(),
             }
             await websocket.send_json(event)
             await broadcaster.publish(event)
@@ -162,6 +170,14 @@ def create_app(
                 source_type=source_type,
                 label=label,
                 latency_ms=result.latency_ms,
+            )
+            consolidator.ingest(
+                session_id=session_id,
+                channel_id=channel_id,
+                source_type=source_type,
+                label=label,
+                text=result.text,
+                occurred_at=occurred_at,
             )
 
         async def worker() -> None:
@@ -236,6 +252,35 @@ def create_app(
                     "avgMs": channel.avg_ms,
                     "totalEvents": channel.total_events,
                     "droppedWindows": channel.dropped_windows,
+                    "lastEventAt": (
+                        channel.last_event_at.isoformat() if channel.last_event_at else None
+                    ),
+                }
+                for channel in snapshot.channels
+            ],
+        }
+
+    @app.get("/v1/sessions/{session_id}/transcript")
+    async def session_transcript(session_id: str) -> dict:
+        snapshot = consolidator.session_transcript(session_id)
+        return {
+            "sessionId": snapshot.session_id,
+            "generatedAt": snapshot.generated_at.isoformat(),
+            "maxSegmentsPerChannel": consolidator.max_segments_per_channel,
+            "channels": [
+                {
+                    "channelId": channel.channel_id,
+                    "sourceType": channel.source_type,
+                    "label": channel.label,
+                    "text": channel.text,
+                    "segmentCount": channel.segment_count,
+                    "totalEvents": channel.total_events,
+                    "duplicateWordsRemoved": channel.duplicate_words_removed,
+                    "droppedSegments": channel.dropped_segments,
+                    "truncated": channel.truncated,
+                    "firstEventAt": (
+                        channel.first_event_at.isoformat() if channel.first_event_at else None
+                    ),
                     "lastEventAt": (
                         channel.last_event_at.isoformat() if channel.last_event_at else None
                     ),

@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.consolidation import TranscriptConsolidationRegistry
 from app.engine import EngineResult, EngineSegment, TranscriptionEngine
 from app.main import create_app
 from app.metrics import LatencyMetricsRegistry
@@ -71,13 +72,21 @@ def metrics_registry() -> LatencyMetricsRegistry:
 
 
 @pytest.fixture()
+def consolidator() -> TranscriptConsolidationRegistry:
+    return TranscriptConsolidationRegistry()
+
+
+@pytest.fixture()
 def client(
-    fake_engine: FakeTranscriptionEngine, metrics_registry: LatencyMetricsRegistry
+    fake_engine: FakeTranscriptionEngine,
+    metrics_registry: LatencyMetricsRegistry,
+    consolidator: TranscriptConsolidationRegistry,
 ) -> TestClient:
     return TestClient(
         create_app(
             settings=make_test_settings(),
             engine=fake_engine,
             metrics_registry=metrics_registry,
+            consolidator=consolidator,
         )
     )
