@@ -19,7 +19,7 @@ Workspace esperado:
 /home/david/workspace/assistant-hub-ai
 ```
 
-## Versão 0.1.6
+## Versão 0.1.8
 
 Esta versão mantém o WSL como ponto único de inicialização e adiciona o planejamento formal de duas capacidades futuras:
 
