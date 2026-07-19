@@ -9,7 +9,7 @@ from .capture import run_agent, run_channel_worker
 from .devices import list_devices, resolve_profile
 from .profiles import channel_from_dict, default_profile, load_profile
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,10 +49,13 @@ def _print_devices(as_json: bool) -> None:
         return
     for device in devices:
         marker = " loopback" if device.get("isLoopbackDevice") else ""
+        default_marker = " default" if device.get("isDefault") else ""
+        endpoint_id = device.get("endpointId") or "-"
         print(
             f"[{device['index']:>2}] {device['name']} | "
             f"in={device['maxInputChannels']} out={device['maxOutputChannels']} "
-            f"rate={device['defaultSampleRate']}{marker}"
+            f"rate={device['defaultSampleRate']}{marker}{default_marker} "
+            f"endpoint={endpoint_id}"
         )
 
 
@@ -74,7 +77,8 @@ def main() -> None:
         for channel, device in resolve_profile(profile.channels):
             print(
                 f"OK channel={channel.channel_id} kind={channel.kind} "
-                f"device=[{device['index']}] {device['name']} rate={device['defaultSampleRate']}"
+                f"device=[{device['index']}] {device['name']} rate={device['defaultSampleRate']} "
+                f"endpointId={device.get('endpointId')}"
             )
         return
 

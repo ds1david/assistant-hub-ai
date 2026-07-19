@@ -12,6 +12,7 @@ ChannelKind = Literal["input", "loopback"]
 
 @dataclass(frozen=True)
 class DeviceSelector:
+    endpoint_id: str | None = None
     index: int | None = None
     name_regex: str | None = None
     use_default: bool = False
@@ -19,10 +20,19 @@ class DeviceSelector:
     def validate(self) -> None:
         configured = sum(
             value is not None and value is not False
-            for value in (self.index, self.name_regex, self.use_default)
+            for value in (self.endpoint_id, self.index, self.name_regex, self.use_default)
         )
-        if configured != 1:
-            raise ValueError("A device selector must define exactly one of: index, nameRegex, default")
+        # endpointId may coexist with index: older agents ignore the unknown
+        # endpointId key and keep using the index, newer agents prefer the
+        # endpointId. Any other combination stays exclusive.
+        endpoint_with_index = self.endpoint_id is not None and self.index is not None
+        if configured == 0 or (configured > 1 and not (configured == 2 and endpoint_with_index)):
+            raise ValueError(
+                "A device selector must define exactly one of: endpointId, index, nameRegex, "
+                "default (endpointId may additionally be combined with index)"
+            )
+        if self.endpoint_id is not None and not self.endpoint_id.strip():
+            raise ValueError("device.endpointId cannot be blank")
         if self.name_regex is not None:
             re.compile(self.name_regex)
 
@@ -90,6 +100,7 @@ class AudioProfile:
 
 def _selector_from_dict(data: dict[str, Any]) -> DeviceSelector:
     return DeviceSelector(
+        endpoint_id=str(data["endpointId"]) if data.get("endpointId") is not None else None,
         index=int(data["index"]) if data.get("index") is not None else None,
         name_regex=str(data["nameRegex"]) if data.get("nameRegex") is not None else None,
         use_default=bool(data.get("default", False)),
@@ -110,11 +121,13 @@ def _processing_from_dict(data: dict[str, Any] | None) -> AudioProcessing:
 
 def channel_to_dict(channel: AudioChannel) -> dict[str, Any]:
     selector: dict[str, Any] = {}
+    if channel.selector.endpoint_id is not None:
+        selector["endpointId"] = channel.selector.endpoint_id
     if channel.selector.index is not None:
         selector["index"] = channel.selector.index
-    elif channel.selector.name_regex is not None:
+    if channel.selector.name_regex is not None:
         selector["nameRegex"] = channel.selector.name_regex
-    else:
+    if not selector:
         selector["default"] = channel.selector.use_default
 
     processing: dict[str, Any] = {"gainDb": channel.processing.gain_db}

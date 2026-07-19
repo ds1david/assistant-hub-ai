@@ -80,6 +80,117 @@ channels:
     assert restored == original
 
 
+ENDPOINT_ID = "{0.0.1.00000000}.{a1b2c3d4-1111-2222-3333-444444444444}"
+
+
+def test_loads_endpoint_id_selector(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        f"""
+version: 1
+name: test-endpoint
+channels:
+  - id: local
+    kind: input
+    device:
+      endpointId: "{ENDPOINT_ID}"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    channel = load_profile(profile_path).channels[0]
+
+    assert channel.selector.endpoint_id == ENDPOINT_ID
+    assert channel.selector.index is None
+
+
+def test_endpoint_id_may_coexist_with_index(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        f"""
+version: 1
+name: test-endpoint-index
+channels:
+  - id: local
+    kind: input
+    device:
+      endpointId: "{ENDPOINT_ID}"
+      index: 5
+""".strip(),
+        encoding="utf-8",
+    )
+
+    channel = load_profile(profile_path).channels[0]
+
+    assert channel.selector.endpoint_id == ENDPOINT_ID
+    assert channel.selector.index == 5
+
+
+def test_rejects_endpoint_id_combined_with_name_regex(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        f"""
+version: 1
+name: test-invalid
+channels:
+  - id: local
+    kind: input
+    device:
+      endpointId: "{ENDPOINT_ID}"
+      nameRegex: Microfone.*
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="device selector"):
+        load_profile(profile_path)
+
+
+def test_rejects_blank_endpoint_id(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-blank
+channels:
+  - id: local
+    kind: input
+    device:
+      endpointId: "  "
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="endpointId"):
+        load_profile(profile_path)
+
+
+def test_endpoint_id_round_trips_through_worker_json(tmp_path: Path) -> None:
+    from assistant_hub_audio.profiles import channel_from_dict, channel_to_dict
+
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        f"""
+version: 1
+name: test-roundtrip
+channels:
+  - id: remote
+    kind: loopback
+    device:
+      endpointId: "{ENDPOINT_ID}"
+      index: 7
+""".strip(),
+        encoding="utf-8",
+    )
+    original = load_profile(profile_path).channels[0]
+
+    serialized = channel_to_dict(original)
+    restored = channel_from_dict(serialized)
+
+    assert serialized["device"] == {"endpointId": ENDPOINT_ID, "index": 7}
+    assert restored == original
+
+
 def test_loads_channel_processing(tmp_path: Path) -> None:
     profile_path = tmp_path / "profile.yaml"
     profile_path.write_text(

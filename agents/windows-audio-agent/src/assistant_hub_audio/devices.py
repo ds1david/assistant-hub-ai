@@ -5,6 +5,13 @@ from typing import Any
 
 import pyaudiowpatch as pyaudio
 
+from .endpoints import (
+    EndpointInfo,
+    EndpointProvider,
+    correlate_devices,
+    find_device_for_endpoint,
+    get_endpoint_provider,
+)
 from .profiles import AudioChannel, DeviceSelector
 
 
@@ -20,9 +27,43 @@ def _normalized_device(info: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_devices() -> list[dict[str, Any]]:
+def _endpoint_fields(endpoint: EndpointInfo | None) -> dict[str, Any]:
+    if endpoint is None:
+        return {"endpointId": None, "friendlyName": None, "dataFlow": None, "isDefault": False}
+    return {
+        "endpointId": endpoint.endpoint_id,
+        "friendlyName": endpoint.friendly_name,
+        "dataFlow": endpoint.data_flow,
+        "isDefault": endpoint.is_default,
+    }
+
+
+def _wasapi_host_api_index(audio: pyaudio.PyAudio) -> int:
+    try:
+        return int(audio.get_host_api_info_by_type(pyaudio.paWASAPI)["index"])
+    except Exception:
+        return -1
+
+
+def _snapshot(
+    audio: pyaudio.PyAudio,
+    provider: EndpointProvider,
+) -> tuple[list[dict[str, Any]], list[EndpointInfo], dict[int, EndpointInfo]]:
+    """Enumerate PyAudio devices and MMDevice endpoints in one correlation session."""
+    devices = [_normalized_device(dict(info)) for info in audio.get_device_info_generator()]
+    endpoints = provider.list_endpoints()
+    correlation = correlate_devices(devices, endpoints, _wasapi_host_api_index(audio))
+    return devices, endpoints, correlation
+
+
+def list_devices(provider: EndpointProvider | None = None) -> list[dict[str, Any]]:
+    provider = provider or get_endpoint_provider()
     with pyaudio.PyAudio() as audio:
-        return [_normalized_device(dict(info)) for info in audio.get_device_info_generator()]
+        devices, _, correlation = _snapshot(audio, provider)
+        return [
+            {**device, **_endpoint_fields(correlation.get(device["index"]))}
+            for device in devices
+        ]
 
 
 def default_microphone(audio: pyaudio.PyAudio) -> dict[str, Any]:
@@ -55,44 +96,60 @@ def _is_eligible(device: dict[str, Any], channel: AudioChannel) -> bool:
 def resolve_device(
     audio: pyaudio.PyAudio,
     channel: AudioChannel,
+    provider: EndpointProvider | None = None,
 ) -> dict[str, Any]:
+    provider = provider or get_endpoint_provider()
+    devices, endpoints, correlation = _snapshot(audio, provider)
     selector: DeviceSelector = channel.selector
-    if selector.index is not None:
+
+    # Selection priority: endpointId > index > default/nameRegex. The
+    # endpointId resolves the *current* PortAudio index through the MMDevice
+    # correlation of this snapshot; there is no silent fallback to index or
+    # name when the endpoint cannot be resolved.
+    if selector.endpoint_id is not None:
+        device = find_device_for_endpoint(
+            devices=devices,
+            correlation=correlation,
+            endpoints=endpoints,
+            endpoint_id=selector.endpoint_id,
+            kind=channel.kind,
+        )
+    elif selector.index is not None:
         device = device_by_index(audio, selector.index)
         if not _is_eligible(device, channel):
             raise RuntimeError(
                 f"Device index {selector.index} is not eligible for channel kind {channel.kind}"
             )
-        return device
+    elif selector.use_default:
+        device = default_loopback(audio) if channel.kind == "loopback" else default_microphone(audio)
+    else:
+        assert selector.name_regex is not None
+        pattern = re.compile(selector.name_regex, re.IGNORECASE)
+        candidates = [device for device in devices if pattern.search(device["name"])]
+        eligible = [device for device in candidates if _is_eligible(device, channel)]
+        if not eligible:
+            raise RuntimeError(
+                f"No {channel.kind} device matched nameRegex={selector.name_regex!r}. "
+                "Run 'assistant-hub-audio list-devices' and adjust the profile."
+            )
+        if len(eligible) > 1:
+            indexes = ", ".join(str(device["index"]) for device in eligible)
+            raise RuntimeError(
+                f"Device selector nameRegex={selector.name_regex!r} is ambiguous; matched indexes: {indexes}"
+            )
+        device = eligible[0]
 
-    if selector.use_default:
-        return default_loopback(audio) if channel.kind == "loopback" else default_microphone(audio)
-
-    assert selector.name_regex is not None
-    pattern = re.compile(selector.name_regex, re.IGNORECASE)
-    candidates = [
-        _normalized_device(dict(info))
-        for info in audio.get_device_info_generator()
-        if pattern.search(str(info["name"]))
-    ]
-    eligible = [device for device in candidates if _is_eligible(device, channel)]
-    if not eligible:
-        raise RuntimeError(
-            f"No {channel.kind} device matched nameRegex={selector.name_regex!r}. "
-            "Run 'assistant-hub-audio list-devices' and adjust the profile."
-        )
-    if len(eligible) > 1:
-        indexes = ", ".join(str(device["index"]) for device in eligible)
-        raise RuntimeError(
-            f"Device selector nameRegex={selector.name_regex!r} is ambiguous; matched indexes: {indexes}"
-        )
-    return eligible[0]
+    return {**device, **_endpoint_fields(correlation.get(device["index"]))}
 
 
-def resolve_profile(profile_channels: tuple[AudioChannel, ...]) -> list[tuple[AudioChannel, dict[str, Any]]]:
+def resolve_profile(
+    profile_channels: tuple[AudioChannel, ...],
+    provider: EndpointProvider | None = None,
+) -> list[tuple[AudioChannel, dict[str, Any]]]:
+    provider = provider or get_endpoint_provider()
     with pyaudio.PyAudio() as audio:
         return [
-            (channel, resolve_device(audio, channel))
+            (channel, resolve_device(audio, channel, provider))
             for channel in profile_channels
             if channel.enabled
         ]

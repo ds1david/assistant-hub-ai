@@ -17,7 +17,7 @@
 - [ ] SF-015 Executar matriz manual com conference cam, Bluetooth e microfone USB.
 - [x] SF-016 Medir p50/p95 por canal via registry em memória e `GET /v1/sessions/{sessionId}/metrics`.
 - [x] SF-017 Consolidar texto e reduzir duplicações.
-- [ ] SF-018 Implementar identidade persistente com MMDevice endpoint ID.
+- [x] SF-018 Implementar identidade persistente com MMDevice endpoint ID.
 - [ ] SF-019 Implementar listener de hot-plug nativo.
 - [ ] SF-020 Avaliar plugin de captura por processo/aplicativo.
 - [ ] SF-021 Publicar eventos v2 no session-core.

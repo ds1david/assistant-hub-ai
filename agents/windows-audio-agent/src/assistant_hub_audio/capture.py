@@ -20,7 +20,7 @@ from scipy.signal import resample_poly
 from websockets.sync.client import connect
 
 from .devices import resolve_device
-from .profiles import AudioChannel, AudioProfile, channel_from_dict, channel_to_dict
+from .profiles import AudioChannel, AudioProfile, channel_to_dict
 
 LOGGER = logging.getLogger(__name__)
 TARGET_RATE = 16_000
@@ -137,23 +137,25 @@ def _capture_once(
     channels = max(1, min(int(device["maxInputChannels"]), 2))
     source_rate = int(device["defaultSampleRate"])
 
-    query = urlencode(
-        {
-            "sourceType": channel.source_type,
-            "deviceName": device["name"],
-            "deviceIndex": device["index"],
-            "label": channel.label or channel.channel_id,
-        }
-    )
+    query_params = {
+        "sourceType": channel.source_type,
+        "deviceName": device["name"],
+        "deviceIndex": device["index"],
+        "label": channel.label or channel.channel_id,
+    }
+    if device.get("endpointId"):
+        query_params["endpointId"] = device["endpointId"]
+    query = urlencode(query_params)
     endpoint = f"{server_url.rstrip('/')}/ws/audio/{session_id}/{channel.channel_id}?{query}"
 
     LOGGER.info(
-        "channel=%s source_type=%s device=(%s) %s channels=%s rate=%s "
+        "channel=%s source_type=%s device=(%s) %s endpoint_id=%s channels=%s rate=%s "
         "gain_db=%s noise_gate_db=%s endpoint=%s",
         channel.channel_id,
         channel.source_type,
         device["index"],
         device["name"],
+        device.get("endpointId"),
         channels,
         source_rate,
         channel.processing.gain_db,

@@ -63,16 +63,18 @@ def test_system_channel_event_matches_contract_v2(client, fake_engine) -> None:
     assert event["channelId"] == "system-main"
     assert event["label"] == "Loopback Speakers"
     assert event["sourceType"] == "system"
-    assert event["device"] == {"index": 7, "name": "Alto-falantes"}
+    assert event["device"] == {"index": 7, "name": "Alto-falantes", "endpointId": None}
     assert event["text"] == "ola do sistema"
     assert event["droppedWindows"] == 0
 
 
 def test_microphone_channel_event_matches_contract_v2(client, fake_engine) -> None:
     fake_engine.script("ola do microfone")
+    endpoint_id = "{0.0.1.00000000}.{a1b2c3d4-1111-2222-3333-444444444444}"
     url = (
         "/ws/audio/sess-mic/mic-1"
         "?sourceType=microphone&label=Headset%20Mic&deviceIndex=2&deviceName=Microfone%20USB"
+        "&endpointId=%7B0.0.1.00000000%7D.%7Ba1b2c3d4-1111-2222-3333-444444444444%7D"
     )
     with client.websocket_connect(url) as ws:
         ws.send_bytes(WINDOW)
@@ -84,7 +86,7 @@ def test_microphone_channel_event_matches_contract_v2(client, fake_engine) -> No
     assert event["channelId"] == "mic-1"
     assert event["label"] == "Headset Mic"
     assert event["sourceType"] == "microphone"
-    assert event["device"] == {"index": 2, "name": "Microfone USB"}
+    assert event["device"] == {"index": 2, "name": "Microfone USB", "endpointId": endpoint_id}
     assert event["text"] == "ola do microfone"
     assert event["droppedWindows"] == 0
 
@@ -111,11 +113,11 @@ def test_simultaneous_microphone_and_system_channels(client, fake_engine) -> Non
     assert system_event["sessionId"] == mic_event["sessionId"] == "sess-multi"
     assert system_event["channelId"] == "system-main"
     assert system_event["sourceType"] == "system"
-    assert system_event["device"] == {"index": 7, "name": "Alto-falantes"}
+    assert system_event["device"] == {"index": 7, "name": "Alto-falantes", "endpointId": None}
     assert system_event["text"] == "audio da reuniao"
     assert mic_event["channelId"] == "mic-1"
     assert mic_event["sourceType"] == "microphone"
-    assert mic_event["device"] == {"index": 2, "name": "Microfone"}
+    assert mic_event["device"] == {"index": 2, "name": "Microfone", "endpointId": None}
     assert mic_event["text"] == "pergunta do usuario"
 
 

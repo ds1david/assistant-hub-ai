@@ -28,7 +28,8 @@
       "required": ["index", "name"],
       "properties": {
         "index": {"type": ["integer", "null"]},
-        "name": {"type": ["string", "null"]}
+        "name": {"type": ["string", "null"]},
+        "endpointId": {"type": ["string", "null"]}
       },
       "additionalProperties": false
     },

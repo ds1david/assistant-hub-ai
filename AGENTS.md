@@ -30,6 +30,7 @@ Construir uma plataforma local-first, modular e extensível para captura, transc
 - o serviço pode suprimir transcrição de microfone semelhante ao áudio remoto recente;
 - não suprima fala local não relacionada;
 - hotwords devem ser configuráveis sem alteração de código;
+- seleção de dispositivo prioriza `endpointId` MMDevice sobre índice e default (ADR-0011); índice permanece como compatibilidade;
 - defaults GPU: `small`, `cuda`, `float16`.
 
 ## Qualidade

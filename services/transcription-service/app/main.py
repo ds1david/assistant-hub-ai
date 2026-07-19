@@ -92,6 +92,7 @@ def create_app(
         source_type = websocket.query_params.get("sourceType", "unknown")
         device_name = websocket.query_params.get("deviceName")
         device_index_raw = websocket.query_params.get("deviceIndex")
+        endpoint_id = websocket.query_params.get("endpointId")
         label = websocket.query_params.get("label") or channel_id
         if source_type not in {"system", "microphone"}:
             await websocket.close(code=1008, reason="sourceType must be system or microphone")
@@ -107,12 +108,13 @@ def create_app(
         windows: asyncio.Queue[tuple[bytes, bool] | None] = asyncio.Queue(maxsize=2)
         dropped_windows = 0
         LOGGER.info(
-            "Audio channel connected session=%s channel=%s source_type=%s device=(%s) %s",
+            "Audio channel connected session=%s channel=%s source_type=%s device=(%s) %s endpoint_id=%s",
             session_id,
             channel_id,
             source_type,
             device_index,
             device_name,
+            endpoint_id,
         )
 
         async def emit(window: bytes, final: bool = False) -> None:
@@ -150,6 +152,7 @@ def create_app(
                 "device": {
                     "index": device_index,
                     "name": device_name,
+                    "endpointId": endpoint_id,
                 },
                 "text": result.text,
                 "language": result.language,
