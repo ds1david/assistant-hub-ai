@@ -23,3 +23,10 @@ config/ai-providers.local.yaml
 .ruff_cache/
 .coverage
 htmlcov/
+# --- SDD / Spec Kit (anexar ao .gitignore existente) ---
+.specify/workflows/runs/
+
+# Tooling local extra
+.venv-agent/
+.venv-windows/
+*.egg-info/

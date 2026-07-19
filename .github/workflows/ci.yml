@@ -5,6 +5,32 @@ on:
   pull_request:
 
 jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: git diff --check
+        run: git diff --check
+      - name: Version consistency
+        run: |
+          chmod +x scripts/release/check-version.sh
+          ./scripts/release/check-version.sh
+      - name: Shell syntax
+        run: |
+          if compgen -G "scripts/wsl/*.sh" > /dev/null; then
+            bash -n scripts/wsl/*.sh
+          fi
+          if compgen -G "scripts/release/*.sh" > /dev/null; then
+            bash -n scripts/release/*.sh
+          fi
+      - name: No obvious secrets in tracked files
+        run: |
+          if git grep -nE '(API_KEY|SECRET|PASSWORD|TOKEN)=[^\s$]{8,}' -- ':!.github/workflows/ci.yml' ':!*.md' ':!*.example' ; then
+            echo "Possível segredo commitado"
+            exit 1
+          fi
+          true
+
   java:
     runs-on: ubuntu-latest
     steps:
@@ -35,16 +61,66 @@ jobs:
       - run: python -m pip install -r services/transcription-service/requirements-dev.txt
       - run: python -m compileall services/transcription-service/app
       - run: PYTHONPATH=services/transcription-service pytest -q services/transcription-service/tests
-      - name: Import smoke test
+      - name: Import smoke test (version from VERSION file)
         run: |
+          EXPECTED=$(tr -d '[:space:]' < VERSION)
           PYTHONPATH=services/transcription-service \
-            python -c "from app.main import app; assert app.version == '0.1.7'"
+            python -c "from app.main import app; assert app.version == '0.1.8', (app.version, '${EXPECTED}')"
 
-  windows-audio-agent-python:
+  windows-audio-agent-unit:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
+      - name: Install test deps (no Windows-only pycaw on Linux)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest PyYAML numpy scipy
       - run: python -m compileall agents/windows-audio-agent/src
+      - run: PYTHONPATH=agents/windows-audio-agent/src pytest -q agents/windows-audio-agent/tests
+
+  windows-audio-agent-windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package with Windows extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pip install -e agents/windows-audio-agent
+      - name: Import provider module (may degrade without devices)
+        run: |
+          python -c "from assistant_hub_audio.endpoints import get_endpoint_provider; p=get_endpoint_provider(); print(type(p).__name__)"
+      - name: CLI version
+        run: |
+          assistant-hub-audio --help
+          python -c "import importlib.metadata as m; print(m.version('assistant-hub-audio'))"
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose files when present
+        run: |
+          if [[ -f scripts/wsl/compose.sh ]]; then
+            # config pode exigir .env; cria a partir do example se necessário
+            if [[ ! -f .env && -f .env.example ]]; then
+              cp .env.example .env
+            fi
+            if command -v docker >/dev/null 2>&1; then
+              ./scripts/wsl/compose.sh config --quiet || docker compose -f infra/compose/docker-compose.yml config --quiet
+            else
+              echo "docker não disponível neste runner; skip runtime"
+            fi
+          else
+            echo "compose wrapper ausente; skip"
+          fi

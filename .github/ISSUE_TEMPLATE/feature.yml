@@ -1,0 +1,100 @@
+name: Feature
+description: Nova feature ou incremento com critérios de aceite (SDD)
+title: "[SF-XXX] Título curto orientado a resultado"
+labels: ["feature"]
+body:
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo
+      description: O que deve ser possível ao final
+      placeholder: Permitir que perfis sobrevivam a reboot usando endpointId MMDevice
+    validations:
+      required: true
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema
+      description: Dor atual e impacto
+    validations:
+      required: true
+
+  - type: textarea
+    id: resultado
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo
+    attributes:
+      label: Escopo
+      description: Lista do que entra
+      value: |
+        - 
+    validations:
+      required: true
+
+  - type: textarea
+    id: fora
+    attributes:
+      label: Fora de escopo
+      value: |
+        - 
+    validations:
+      required: true
+
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critérios de aceite
+      value: |
+        - [ ] 
+    validations:
+      required: true
+
+  - type: textarea
+    id: contratos
+    attributes:
+      label: Contratos e compatibilidade
+      description: Schemas, eventos, ADRs impactados
+      value: |
+        - Sem mudança de contrato
+    validations:
+      required: true
+
+  - type: textarea
+    id: testes_auto
+    attributes:
+      label: Testes automatizados
+      value: |
+        - [ ] Unitários
+        - [ ] Contrato
+    validations:
+      required: true
+
+  - type: textarea
+    id: testes_manuais
+    attributes:
+      label: Validações manuais
+      description: Windows / GPU / hardware — ou "não aplicável"
+      value: |
+        - [ ] Não aplicável
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: Dependências
+      value: |
+        - 
+
+  - type: textarea
+    id: riscos
+    attributes:
+      label: Riscos
+      value: |
+        - 
