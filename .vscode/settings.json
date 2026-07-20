@@ -3,5 +3,6 @@
   "files.trimTrailingWhitespace": true,
   "java.configuration.updateBuildConfiguration": "automatic",
   "python.defaultInterpreterPath": "/usr/bin/python3",
-  "terminal.integrated.defaultProfile.linux": "bash"
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "java.compile.nullAnalysis.mode": "automatic"
 }
