@@ -92,7 +92,7 @@ def create_app(
         source_type = websocket.query_params.get("sourceType", "unknown")
         device_name = websocket.query_params.get("deviceName")
         device_index_raw = websocket.query_params.get("deviceIndex")
-        endpoint_id = websocket.query_params.get("endpointId")
+        endpoint_id = websocket.query_params.get("endpointId") or None
         label = websocket.query_params.get("label") or channel_id
         if source_type not in {"system", "microphone"}:
             await websocket.close(code=1008, reason="sourceType must be system or microphone")

@@ -91,6 +91,22 @@ def test_microphone_channel_event_matches_contract_v2(client, fake_engine) -> No
     assert event["droppedWindows"] == 0
 
 
+def test_blank_endpoint_id_query_param_normalizes_to_null(client, fake_engine) -> None:
+    """An empty ?endpointId= (e.g. Linux/legacy agents) must map to device.endpointId
+    null, not the literal empty string, so it stays semantically "unknown" (CHK015)."""
+    fake_engine.script("sem endpoint")
+    url = (
+        "/ws/audio/sess-blank/mic-1"
+        "?sourceType=microphone&label=Mic&deviceIndex=2&deviceName=Microfone&endpointId="
+    )
+    with client.websocket_connect(url) as ws:
+        ws.send_bytes(WINDOW)
+        event = ws.receive_json()
+
+    VALIDATOR.validate(event)
+    assert event["device"] == {"index": 2, "name": "Microfone", "endpointId": None}
+
+
 def test_simultaneous_microphone_and_system_channels(client, fake_engine) -> None:
     fake_engine.script("audio da reuniao", "pergunta do usuario")
     system_url = (

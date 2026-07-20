@@ -15,9 +15,13 @@ from typing import Any
 from urllib.parse import urlencode
 
 import numpy as np
-import pyaudiowpatch as pyaudio
 from scipy.signal import resample_poly
 from websockets.sync.client import connect
+
+try:
+    import pyaudiowpatch as pyaudio
+except ImportError:  # pragma: no cover - PyAudioWPatch only ships wheels for Windows (P3)
+    pyaudio = None  # type: ignore[assignment]
 
 from .devices import resolve_device
 from .profiles import AudioChannel, AudioProfile, channel_to_dict
@@ -90,6 +94,16 @@ def _safe_filename(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]+", "_", value).strip("._") or "channel"
 
 
+class EndpointResolutionError(RuntimeError):
+    """Device resolution failed in a way retrying cannot fix.
+
+    Covers the four find_device_for_endpoint failure modes (FR-007/P7 — no
+    silent fallback) and other resolve_device configuration errors (bad
+    index/nameRegex/ambiguous match): none of these improve by retrying, so
+    the worker exits instead of looping forever with a reconnect backoff.
+    """
+
+
 def capture_channel(
     *,
     audio: pyaudio.PyAudio,
@@ -114,6 +128,12 @@ def capture_channel(
             )
         except KeyboardInterrupt:
             stop_event.set()
+        except EndpointResolutionError:
+            LOGGER.error(
+                "Endpoint resolution failed permanently for channel=%s; not retrying.",
+                channel.channel_id,
+            )
+            raise
         except Exception as exc:
             LOGGER.exception("Capture failed for channel=%s: %s", channel.channel_id, exc)
             if stop_event.wait(reconnect_delay):
@@ -133,7 +153,10 @@ def _capture_once(
     record_path: Path | None,
     chunk_size: int,
 ) -> None:
-    device: dict[str, Any] = resolve_device(audio, channel)
+    try:
+        device: dict[str, Any] = resolve_device(audio, channel)
+    except Exception as exc:
+        raise EndpointResolutionError(str(exc)) from exc
     channels = max(1, min(int(device["maxInputChannels"]), 2))
     source_rate = int(device["defaultSampleRate"])
 
@@ -290,43 +313,56 @@ def run_agent(
 ) -> None:
     """Supervise one OS process per enabled audio endpoint.
 
+    Each channel is isolated in its own process (ADR-0007/P6): a channel that
+    fails to start or dies mid-capture is logged and dropped from
+    supervision, but the remaining channels keep running. The supervisor
+    only raises — and the command only exits non-zero — once every enabled
+    channel has failed.
+
     The command intentionally remains in the foreground. Returning to the
-    PowerShell prompt before Ctrl+C means the supervisor or a worker failed.
+    PowerShell prompt before Ctrl+C means every channel failed or the
+    supervisor itself failed.
     """
     workers: list[tuple[AudioChannel, subprocess.Popen[bytes]]] = []
+    failures: dict[str, str] = {}
+
+    def _start_channel(channel: AudioChannel) -> None:
+        record_path = (
+            record_dir / f"{_safe_filename(session_id)}-{_safe_filename(channel.channel_id)}.wav"
+            if record_dir
+            else None
+        )
+        command = _worker_command(
+            channel=channel,
+            session_id=session_id,
+            server_url=server_url,
+            record_path=record_path,
+            log_level=log_level,
+        )
+        process = subprocess.Popen(command)
+        LOGGER.info("Started worker channel=%s pid=%s", channel.channel_id, process.pid)
+
+        # Opening multiple WASAPI endpoints simultaneously can crash native
+        # PortAudio drivers. Stagger worker startup and detect an immediate
+        # failure without taking the other channels down with it.
+        time.sleep(_WORKER_STARTUP_DELAY_SECONDS)
+        return_code = process.poll()
+        if return_code is not None:
+            reason = f"failed during startup exit={_format_exit_code(return_code)}"
+            failures[channel.channel_id] = reason
+            LOGGER.error("Audio worker %s: channel=%s", reason, channel.channel_id)
+            return
+        workers.append((channel, process))
 
     try:
         for channel in profile.channels:
-            if not channel.enabled:
-                continue
-            record_path = (
-                record_dir / f"{_safe_filename(session_id)}-{_safe_filename(channel.channel_id)}.wav"
-                if record_dir
-                else None
-            )
-            command = _worker_command(
-                channel=channel,
-                session_id=session_id,
-                server_url=server_url,
-                record_path=record_path,
-                log_level=log_level,
-            )
-            process = subprocess.Popen(command)
-            workers.append((channel, process))
-            LOGGER.info("Started worker channel=%s pid=%s", channel.channel_id, process.pid)
-
-            # Opening multiple WASAPI endpoints simultaneously can crash native
-            # PortAudio drivers. Stagger worker startup and fail explicitly if
-            # a channel dies during initialization.
-            time.sleep(_WORKER_STARTUP_DELAY_SECONDS)
-            return_code = process.poll()
-            if return_code is not None:
-                raise RuntimeError(
-                    f"Audio worker failed during startup: channel={channel.channel_id} "
-                    f"exit={_format_exit_code(return_code)}"
-                )
+            if channel.enabled:
+                _start_channel(channel)
 
         if not workers:
+            details = "; ".join(f"{cid} ({reason})" for cid, reason in failures.items())
+            if details:
+                raise RuntimeError(f"All enabled audio channels failed during startup: {details}")
             raise RuntimeError("The selected profile has no enabled audio channels")
 
         LOGGER.info(
@@ -337,13 +373,24 @@ def run_agent(
         )
 
         while True:
+            still_running: list[tuple[AudioChannel, subprocess.Popen[bytes]]] = []
             for channel, process in workers:
                 return_code = process.poll()
-                if return_code is not None:
-                    raise RuntimeError(
-                        f"Audio worker stopped unexpectedly: channel={channel.channel_id} "
-                        f"pid={process.pid} exit={_format_exit_code(return_code)}"
-                    )
+                if return_code is None:
+                    still_running.append((channel, process))
+                    continue
+                reason = f"stopped unexpectedly pid={process.pid} exit={_format_exit_code(return_code)}"
+                failures[channel.channel_id] = reason
+                LOGGER.error(
+                    "Audio worker %s: channel=%s. Other channels keep running.",
+                    reason,
+                    channel.channel_id,
+                )
+            workers = still_running
+
+            if not workers:
+                details = "; ".join(f"{cid} ({reason})" for cid, reason in failures.items())
+                raise RuntimeError(f"All audio channels stopped: {details}")
             time.sleep(0.25)
     except KeyboardInterrupt:
         LOGGER.info("Stopping audio capture...")
