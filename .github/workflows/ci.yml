@@ -78,10 +78,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install test deps (no Windows-only pycaw on Linux)
+      - name: Install test deps (no Windows-only pycaw/PyAudioWPatch on Linux)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest PyYAML numpy scipy
+          python -m pip install pytest PyYAML numpy scipy websockets
       - run: python -m compileall agents/windows-audio-agent/src
       - run: PYTHONPATH=agents/windows-audio-agent/src pytest -q agents/windows-audio-agent/tests
 
