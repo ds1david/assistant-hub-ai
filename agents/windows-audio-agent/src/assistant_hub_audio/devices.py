@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import pyaudiowpatch as pyaudio
+try:
+    import pyaudiowpatch as pyaudio
+except ImportError:  # pragma: no cover - PyAudioWPatch only ships wheels for Windows (P3)
+    pyaudio = None  # type: ignore[assignment]
 
 from .endpoints import (
     EndpointInfo,
