@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - PyAudioWPatch only ships wheels for Wi
     pyaudio = None  # type: ignore[assignment]
 
 from .devices import resolve_device
+from .hotplug import ChannelHotplugSignal, HotplugListener, get_notification_provider
 from .profiles import AudioChannel, AudioProfile, channel_to_dict
 
 LOGGER = logging.getLogger(__name__)
@@ -104,6 +105,47 @@ class EndpointResolutionError(RuntimeError):
     """
 
 
+class EndpointRemovedError(RuntimeError):
+    """The configured endpoint was removed while capture was in progress.
+
+    Unlike EndpointResolutionError, this is not permanent: the device may
+    come back (SF-019 FR-003), so capture_channel keeps retrying with the
+    normal reconnect backoff instead of exiting the worker.
+    """
+
+
+# Poll granularity for the reconnect wait: short enough that an "arrived"
+# notification (FR-003) wakes the wait promptly, without needing a combined
+# wait primitive across stop_event and signal.arrived.
+_RECONNECT_POLL_SECONDS = 0.1
+
+
+def _wait_for_reconnect(
+    stop_event: threading.Event, signal: ChannelHotplugSignal, delay: float
+) -> str:
+    """Wait up to `delay` seconds in short slices, waking early on stop or an
+    endpoint arrival (FR-003), instead of always waiting out the full backoff.
+
+    Returns "stop", "arrived" or "timeout". `stop_event` always takes
+    priority over a pending arrival (FR-008): a deliberately stopped channel
+    must never be woken back up by an arrival notification. Budget is
+    tracked as a slice countdown rather than a wall-clock deadline so a
+    monkeypatched `stop_event.wait` (as used in tests) still bounds the loop.
+    """
+    remaining = delay
+    while remaining > 0:
+        if stop_event.is_set():
+            return "stop"
+        if signal.arrived.is_set():
+            signal.arrived.clear()
+            return "arrived"
+        slice_seconds = min(remaining, _RECONNECT_POLL_SECONDS)
+        if stop_event.wait(slice_seconds):
+            return "stop"
+        remaining -= slice_seconds
+    return "timeout"
+
+
 def capture_channel(
     *,
     audio: pyaudio.PyAudio,
@@ -114,33 +156,67 @@ def capture_channel(
     record_path: Path | None,
     chunk_size: int = 1024,
 ) -> None:
-    reconnect_delay = 1.0
-    while not stop_event.is_set():
-        try:
-            _capture_once(
-                audio=audio,
-                channel=channel,
-                session_id=session_id,
-                server_url=server_url,
-                stop_event=stop_event,
-                record_path=record_path,
-                chunk_size=chunk_size,
-            )
-        except KeyboardInterrupt:
-            stop_event.set()
-        except EndpointResolutionError:
-            LOGGER.error(
-                "Endpoint resolution failed permanently for channel=%s; not retrying.",
-                channel.channel_id,
-            )
-            raise
-        except Exception as exc:
-            LOGGER.exception("Capture failed for channel=%s: %s", channel.channel_id, exc)
-            if stop_event.wait(reconnect_delay):
-                return
+    signal = ChannelHotplugSignal(configured_endpoint_id=channel.selector.endpoint_id)
+    listener = HotplugListener(get_notification_provider(), signal)
+    try:
+        reconnect_delay = 1.0
+        # True only for the one _capture_once attempt immediately following an
+        # arrival wake-up. Used to relax EndpointResolutionError's normally
+        # permanent contract (FR-003 / Clarifications Q3): a still-failing
+        # re-resolution right after an arrival is treated as if the
+        # notification hadn't happened, not as a fatal misconfiguration.
+        woke_on_arrival = False
+
+        def _retry_after_wait() -> bool:
+            nonlocal reconnect_delay, woke_on_arrival
+            outcome = _wait_for_reconnect(stop_event, signal, reconnect_delay)
+            woke_on_arrival = outcome == "arrived"
+            if outcome == "stop":
+                return True
             reconnect_delay = min(reconnect_delay * 2, 10.0)
-        else:
-            reconnect_delay = 1.0
+            return False
+
+        while not stop_event.is_set():
+            try:
+                _capture_once(
+                    audio=audio,
+                    channel=channel,
+                    session_id=session_id,
+                    server_url=server_url,
+                    stop_event=stop_event,
+                    record_path=record_path,
+                    chunk_size=chunk_size,
+                    signal=signal,
+                )
+            except KeyboardInterrupt:
+                stop_event.set()
+            except EndpointResolutionError:
+                if not woke_on_arrival:
+                    LOGGER.error(
+                        "Endpoint resolution failed permanently for channel=%s; not retrying.",
+                        channel.channel_id,
+                    )
+                    raise
+                LOGGER.warning(
+                    "Endpoint still not resolvable right after an arrival notification for "
+                    "channel=%s; falling back to the generic reconnect backoff.",
+                    channel.channel_id,
+                )
+                if _retry_after_wait():
+                    return
+            except EndpointRemovedError as exc:
+                LOGGER.error("Endpoint removed for channel=%s: %s", channel.channel_id, exc)
+                if _retry_after_wait():
+                    return
+            except Exception as exc:
+                LOGGER.exception("Capture failed for channel=%s: %s", channel.channel_id, exc)
+                if _retry_after_wait():
+                    return
+            else:
+                reconnect_delay = 1.0
+                woke_on_arrival = False
+    finally:
+        listener.close()
 
 
 def _capture_once(
@@ -152,6 +228,7 @@ def _capture_once(
     stop_event: threading.Event,
     record_path: Path | None,
     chunk_size: int,
+    signal: ChannelHotplugSignal,
 ) -> None:
     try:
         device: dict[str, Any] = resolve_device(audio, channel)
@@ -203,6 +280,12 @@ def _capture_once(
             max_size=None,
         ) as websocket:
             while not stop_event.is_set():
+                if signal.removed.is_set():
+                    signal.removed.clear()
+                    raise EndpointRemovedError(
+                        f"Endpoint {channel.selector.endpoint_id!r} was removed while "
+                        f"channel={channel.channel_id} was capturing."
+                    )
                 raw = stream.read(chunk_size, exception_on_overflow=False)
                 pcm = _normalize_pcm(
                     raw,
