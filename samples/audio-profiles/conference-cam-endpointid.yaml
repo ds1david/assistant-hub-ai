@@ -1,0 +1,19 @@
+﻿version: 1
+name: conference-cam-endpointid
+server: ws://127.0.0.1:8001
+channels:
+  - id: local_conference_cam
+    label: Microfone da conference cam
+    kind: input
+    device:
+      endpointId: "{0.0.1.00000000}.{a71c8798-dab9-4990-8407-65a27a472b40}"
+    processing:
+      gainDb: 0
+      noiseGateDb: -36
+  - id: remote_conference_output
+    label: Áudio remoto da conference cam
+    kind: loopback
+    device:
+      endpointId: "{0.0.0.00000000}.{b4557e38-489f-48c6-bdbf-a30ec26e14bd}"
+    processing:
+      gainDb: 0

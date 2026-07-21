@@ -21,7 +21,7 @@
 
 ## Perfil usado
 
-- Path: `conference-cam-endpointid.yaml`
+- Path: `samples/audio-profiles/conference-cam-endpointid.yaml`
 - Seletores: `endpointId` explícito (prioridade máxima, P7/ADR-0011) — `nameRegex`/`default` se mostraram ambíguos/incompletos nesta máquina (ver Casos 3 e 7)
 
 ## Casos
@@ -38,7 +38,7 @@ assistant-hub-audio list-devices --json
 ### 2. probe com endpointId
 
 ```powershell
-& "$env:LOCALAPPDATA\AssistantHubAI\audio-agent-venv\Scripts\assistant-hub-audio.exe" probe --profile conference-cam-endpointid.yaml
+& "$env:LOCALAPPDATA\AssistantHubAI\audio-agent-venv\Scripts\assistant-hub-audio.exe" probe --profile samples\audio-profiles\conference-cam-endpointid.yaml
 ```
 
 - [x] resolve o dispositivo correto — `OK channel=local_conference_cam ... device=[9] ...` e `OK channel=remote_conference_output ... device=[10] ...`
@@ -47,7 +47,7 @@ assistant-hub-audio list-devices --json
 ### 3. run captura
 
 ```powershell
-.\scripts\windows\run-audio-agent-foreground.ps1 -Session sf015-conference-cam -Profile conference-cam-endpointid.yaml
+.\scripts\windows\run-audio-agent-foreground.ps1 -Session sf015-conference-cam -Profile samples\audio-profiles\conference-cam-endpointid.yaml
 ```
 
 - [x] stream abre no índice atual correto — index 9 e 10, confirmado no log do agente
@@ -68,7 +68,7 @@ assistant-hub-audio list-devices --json
 ### 6. Endpoint desabilitado / inexistente
 
 - [ ] mensagem distinta para desabilitado/unplugged — **pendente**, requer desabilitar o dispositivo no Gerenciador de Dispositivos
-- [x] mensagem distinta para ID desconhecido com alternativas — confirmado 2026-07-20: `RuntimeError: Endpoint ID '...' was not found for channel kind=input. Available capture endpoints: [lista com state=active/notpresent]. Run 'assistant-hub-audio list-devices --json' and update the profile.`
+- [x] mensagem distinta para ID desconhecido com alternativas — confirmado 2026-07-20 usando `samples/audio-profiles/conference-cam-fake-endpoint.yaml` (endpointId inexistente): `RuntimeError: Endpoint ID '...' was not found for channel kind=input. Available capture endpoints: [lista com state=active/notpresent]. Run 'assistant-hub-audio list-devices --json' and update the profile.`
 - [x] sem fallback silencioso para outro device — o erro interrompe a execução, não escolhe outro device automaticamente
 
 ### 7. Bluetooth / nomes duplicados (se aplicável)

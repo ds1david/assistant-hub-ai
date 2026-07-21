@@ -54,9 +54,9 @@ Projeto de documentação/validação — sem `src/`. Artefatos ficam em `docs/v
 ### Implementation for User Story 1
 
 - [X] T006 [US1] Rodar `assistant-hub-audio list-devices --json` (Windows) e registrar `endpointId`/friendly name do microfone e do render/loopback da conference cam em `docs/validation/sf-015-conference-cam.md`
-- [X] T007 [US1] Criar perfil YAML com dois canais apontando os `endpointId` do passo anterior — feito como `conference-cam-endpointid.yaml` (schema real usa `kind: input`/`kind: loopback`, não `sourceType`; corrigido no quickstart.md)
+- [X] T007 [US1] Criar perfil YAML com dois canais apontando os `endpointId` do passo anterior — feito como `samples/audio-profiles/conference-cam-endpointid.yaml` (schema real usa `kind: input`/`kind: loopback`, não `sourceType`; corrigido no quickstart.md)
 - [X] T008 [US1] Confirmar resolução correta de ambos os canais por `endpointId` — validado implicitamente via `run` (ver T009); samples do repo (`nameRegex`/`default`) se mostraram ambíguos/incompletos nesta máquina
-- [X] T009 [US1] Rodar `run --session sf015-conference-cam --profile conference-cam-endpointid.yaml` e confirmar que o evento v2 de cada canal preserva `endpointId`/`channelId`/`sourceType` — confirmado em 2026-07-20
+- [X] T009 [US1] Rodar `run --session sf015-conference-cam --profile samples/audio-profiles/conference-cam-endpointid.yaml` e confirmar que o evento v2 de cada canal preserva `endpointId`/`channelId`/`sourceType` — confirmado em 2026-07-20
 - [X] T010 [US1] Falar frases de referência durante playback remoto simultâneo e registrar em `sf-015-conference-cam.md` se a supressão de eco evitou duplicação óbvia da fala remota no canal local (ADR-0008) — confirmado via sessão companheira `session-20260720-183342` (mesmo hardware): 8 supressões de eco corretas, similaridade 0.82-1.00, ver logs do `transcription-service`
 - [X] T010a [US1] Registrar latência percebida entre fala e transcrição em `docs/validation/sf-015-conference-cam.md` (seção "Latência percebida") — medido objetivamente via `/v1/sessions/.../metrics`: p50=402ms, p95=450ms
 - [X] T011 [US1] Preencher o campo `Resultado` (PASS/FAIL/BLOCKED) e `Limitações` em `docs/validation/sf-015-conference-cam.md`, garantindo que nenhum checkbox do template fique em branco — **Resultado: PASS**

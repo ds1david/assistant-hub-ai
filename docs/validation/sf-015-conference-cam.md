@@ -19,7 +19,7 @@
 
 ## Perfil usado
 
-- Path: `conference-cam-endpointid.yaml` (criado manualmente com `endpointId` explícito, já que os samples do repo usam `nameRegex`/`default`, que se mostraram ambíguos/incompletos nesta máquina)
+- Path: `samples/audio-profiles/conference-cam-endpointid.yaml` (criado manualmente com `endpointId` explícito, já que os samples do repo usam `nameRegex`/`default`, que se mostraram ambíguos/incompletos nesta máquina)
 - Canais: `local_conference_cam` (kind `input`), `remote_conference_output` (kind `loopback`)
 
 ## Casos
@@ -39,7 +39,7 @@ assistant-hub-audio list-devices --json
 ### 3. run captura
 
 ```powershell
-.\scripts\windows\run-audio-agent-foreground.ps1 -Session sf015-conference-cam -Profile .\conference-cam-endpointid.yaml
+.\scripts\windows\run-audio-agent-foreground.ps1 -Session sf015-conference-cam -Profile .\samples\audio-profiles\conference-cam-endpointid.yaml
 ```
 
 - [x] evento v2 de cada canal preserva endpointId/channelId/sourceType — confirmado no log: `local_conference_cam` com `endpoint_id={0.0.1.00000000}...`, `remote_conference_output` com `endpoint_id={0.0.0.00000000}...`; ambos com `endpointId=` presente na URL do WebSocket
