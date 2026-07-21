@@ -14,7 +14,7 @@
 - [x] SF-012 Publicar eventos de transcrição v2 com dispositivo e `channelId`.
 - [x] SF-013 Tornar o dashboard dinâmico por canal.
 - [x] SF-014 Adicionar testes de contrato end-to-end com áudio sintético.
-- [ ] SF-015 Executar matriz manual com conference cam, Bluetooth e microfone USB.
+- [x] SF-015 Executar matriz manual com conference cam, Bluetooth e microfone USB. (PASS parcial — Bluetooth/USB BLOCKED por falta de hardware; reboot/hot-plug/endpoint desabilitado pendentes como follow-up; ver docs/validation/)
 - [x] SF-016 Medir p50/p95 por canal via registry em memória e `GET /v1/sessions/{sessionId}/metrics`.
 - [x] SF-017 Consolidar texto e reduzir duplicações.
 - [x] SF-018 Implementar identidade persistente com MMDevice endpoint ID.
