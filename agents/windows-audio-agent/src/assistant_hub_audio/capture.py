@@ -219,6 +219,14 @@ def capture_channel(
             except KeyboardInterrupt:
                 stop_event.set()
             except EndpointResolutionError:
+                if resolved_at_least_once:
+                    LOGGER.warning(
+                        "Endpoint resolution failed for channel=%s after a prior successful "
+                        "capture (likely a transient unplug/notpresent); falling back to the "
+                        "generic reconnect backoff instead of exiting.",
+                        channel.channel_id,
+                    )
+                elif not woke_on_arrival:
                 if channel.selector.process_id is not None or channel.selector.process_name is not None:
                     # SF-020: a process-based channel's resolution failure is
                     # always permanent - at startup (never resolved, FR-005),
@@ -289,6 +297,17 @@ def _capture_once(
     signal: ChannelHotplugSignal,
     on_resolved: Callable[[], None],
 ) -> None:
+    try:
+        device: dict[str, Any] = resolve_device(audio, channel)
+    except Exception as exc:
+        raise EndpointResolutionError(str(exc)) from exc
+    # Signal success as soon as resolution succeeds, not only when this whole
+    # call returns without raising: the read loop below runs until stop_event
+    # is set, an unplug, or a stream error - it never "returns cleanly after
+    # capturing a while" on its own, so the caller's success flag has to be
+    # set here to distinguish a later notpresent failure from one that has
+    # never resolved (SF-019 Issue #22 Bug B, FR-004/FR-005).
+    on_resolved()
     is_process_channel = (
         channel.selector.process_id is not None or channel.selector.process_name is not None
     )
