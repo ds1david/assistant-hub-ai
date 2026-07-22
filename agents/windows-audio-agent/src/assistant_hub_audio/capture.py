@@ -219,6 +219,17 @@ def capture_channel(
             except KeyboardInterrupt:
                 stop_event.set()
             except EndpointResolutionError:
+                if channel.selector.process_id is not None or channel.selector.process_name is not None:
+                    # SF-020: a process-based channel's resolution failure is
+                    # always permanent - at startup (never resolved, FR-005),
+                    # or after a ProcessExitedError re-resolution that turned
+                    # out ambiguous/absent (FR-012) - never the device-only
+                    # resolved_at_least_once/woke_on_arrival relaxations below.
+                    LOGGER.error(
+                        "Process resolution failed permanently for channel=%s; not retrying.",
+                        channel.channel_id,
+                    )
+                    raise
                 if resolved_at_least_once:
                     LOGGER.warning(
                         "Endpoint resolution failed for channel=%s after a prior successful "
@@ -227,18 +238,6 @@ def capture_channel(
                         channel.channel_id,
                     )
                 elif not woke_on_arrival:
-                if channel.selector.process_id is not None or channel.selector.process_name is not None:
-                    # SF-020: a process-based channel's resolution failure is
-                    # always permanent - at startup (never resolved, FR-005),
-                    # or after a ProcessExitedError re-resolution that turned
-                    # out ambiguous/absent (FR-012) - never the device-only
-                    # "retry right after an arrival" relaxation below.
-                    LOGGER.error(
-                        "Process resolution failed permanently for channel=%s; not retrying.",
-                        channel.channel_id,
-                    )
-                    raise
-                if not woke_on_arrival:
                     LOGGER.error(
                         "Endpoint resolution failed permanently for channel=%s; not retrying.",
                         channel.channel_id,
@@ -297,17 +296,6 @@ def _capture_once(
     signal: ChannelHotplugSignal,
     on_resolved: Callable[[], None],
 ) -> None:
-    try:
-        device: dict[str, Any] = resolve_device(audio, channel)
-    except Exception as exc:
-        raise EndpointResolutionError(str(exc)) from exc
-    # Signal success as soon as resolution succeeds, not only when this whole
-    # call returns without raising: the read loop below runs until stop_event
-    # is set, an unplug, or a stream error - it never "returns cleanly after
-    # capturing a while" on its own, so the caller's success flag has to be
-    # set here to distinguish a later notpresent failure from one that has
-    # never resolved (SF-019 Issue #22 Bug B, FR-004/FR-005).
-    on_resolved()
     is_process_channel = (
         channel.selector.process_id is not None or channel.selector.process_name is not None
     )
@@ -335,6 +323,13 @@ def _capture_once(
             device = resolve_device(audio, channel)
         except Exception as exc:
             raise EndpointResolutionError(str(exc)) from exc
+    # Signal success as soon as resolution succeeds, not only when this whole
+    # call returns without raising: the read loop below runs until stop_event
+    # is set, an unplug, or a stream error - it never "returns cleanly after
+    # capturing a while" on its own, so the caller's success flag has to be
+    # set here to distinguish a later notpresent failure from one that has
+    # never resolved (SF-019 Issue #22 Bug B, FR-004/FR-005).
+    on_resolved()
     channels = max(1, min(int(device["maxInputChannels"]), 2))
     source_rate = int(device["defaultSampleRate"])
 

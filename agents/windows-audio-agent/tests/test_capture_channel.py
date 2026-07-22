@@ -145,6 +145,7 @@ def test_process_channel_endpoint_query_has_no_index_or_endpoint_id(
         record_path=None,
         chunk_size=1024,
         signal=ChannelHotplugSignal(configured_endpoint_id=None),
+        on_resolved=lambda: None,
     )
 
     assert len(captured_urls) == 1
@@ -181,6 +182,7 @@ def test_process_channel_isolated_from_device_channel(monkeypatch: pytest.Monkey
         record_path=None,
         chunk_size=1024,
         signal=ChannelHotplugSignal(configured_endpoint_id=None),
+        on_resolved=lambda: None,
     )
     capture._capture_once(
         audio=_FakeAudio(device_stream),
@@ -191,6 +193,7 @@ def test_process_channel_isolated_from_device_channel(monkeypatch: pytest.Monkey
         record_path=None,
         chunk_size=1024,
         signal=ChannelHotplugSignal(configured_endpoint_id="EP1"),
+        on_resolved=lambda: None,
     )
 
     assert process_stream.read_count == 1
