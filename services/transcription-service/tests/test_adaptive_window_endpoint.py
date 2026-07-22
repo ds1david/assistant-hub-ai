@@ -197,7 +197,19 @@ def test_metrics_endpoint_reports_applied_window(
     app = create_app(settings=settings, engine=fake_engine, metrics_registry=registry)
     client = TestClient(app)
 
-    fake_engine.script("primeira janela", "segunda janela")
+    fake_engine.script(
+        "primeira janela",
+        "segunda janela",
+        # O overlap (0.1s) fica acima do min_audio_seconds (0.05s) destas
+        # settings, então o flush() do disconnect sempre emite uma janela
+        # final com o remanescente do buffer. Sem repetir o último texto
+        # aqui, o fake engine cai no fallback default, o transcriber não
+        # dedupe (texto diferente de "segunda janela") e o worker dispara
+        # mais uma reavaliação da janela adaptativa (0.3s -> 0.2s) de forma
+        # racy: só se manifesta quando esse to_thread termina antes do GET
+        # de metrics abaixo. Repetir o texto garante o dedupe determinístico.
+        "segunda janela",
+    )
     with client.websocket_connect(
         "/ws/audio/sess-metrics/mic-1?sourceType=microphone"
     ) as ws:
