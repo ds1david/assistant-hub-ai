@@ -119,7 +119,14 @@ class HotplugListener:
     def __init__(self, provider: NotificationProvider, signal: ChannelHotplugSignal) -> None:
         self._provider = provider
         self.signal = signal
-        self._provider.subscribe(self.signal.handle_event)
+        try:
+            self._provider.subscribe(self.signal.handle_event)
+        except Exception as exc:  # noqa: BLE001 - COM/import failures must not crash capture
+            LOGGER.warning(
+                "Hot-plug notification subscription failed; hot-plug detection disabled "
+                "for this channel: %s",
+                exc,
+            )
 
     def close(self) -> None:
         self._provider.close()

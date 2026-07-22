@@ -8,5 +8,4 @@ Requires-Dist: numpy<3,>=2
 Requires-Dist: scipy<2,>=1.14
 Requires-Dist: websockets<16,>=14
 Requires-Dist: PyYAML<7,>=6
-Requires-Dist: psutil>=5.9
 Requires-Dist: pycaw>=20240210; sys_platform == "win32"

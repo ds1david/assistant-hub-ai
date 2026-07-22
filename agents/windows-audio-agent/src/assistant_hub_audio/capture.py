@@ -11,7 +11,7 @@ import threading
 import time
 import wave
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlencode
 
 import numpy as np
@@ -182,6 +182,17 @@ def capture_channel(
         # re-resolution right after an arrival is treated as if the
         # notification hadn't happened, not as a fatal misconfiguration.
         woke_on_arrival = False
+        # True once this channel has captured successfully at least once.
+        # Distinguishes a transient `notpresent` unplug (SF-019 Issue #22 Bug
+        # B) - which must not kill the worker - from a resolution failure
+        # that has never succeeded (bad index/nameRegex, or an endpointId
+        # that never existed), which must keep failing fast per SF-018
+        # (FR-004/FR-005).
+        resolved_at_least_once = False
+
+        def _mark_resolved() -> None:
+            nonlocal resolved_at_least_once
+            resolved_at_least_once = True
 
         def _retry_after_wait() -> bool:
             nonlocal reconnect_delay, woke_on_arrival
@@ -203,6 +214,7 @@ def capture_channel(
                     record_path=record_path,
                     chunk_size=chunk_size,
                     signal=signal,
+                    on_resolved=_mark_resolved,
                 )
             except KeyboardInterrupt:
                 stop_event.set()
@@ -224,11 +236,12 @@ def capture_channel(
                         channel.channel_id,
                     )
                     raise
-                LOGGER.warning(
-                    "Endpoint still not resolvable right after an arrival notification for "
-                    "channel=%s; falling back to the generic reconnect backoff.",
-                    channel.channel_id,
-                )
+                else:
+                    LOGGER.warning(
+                        "Endpoint still not resolvable right after an arrival notification for "
+                        "channel=%s; falling back to the generic reconnect backoff.",
+                        channel.channel_id,
+                    )
                 if _retry_after_wait():
                     return
             except EndpointRemovedError as exc:
@@ -274,6 +287,7 @@ def _capture_once(
     record_path: Path | None,
     chunk_size: int,
     signal: ChannelHotplugSignal,
+    on_resolved: Callable[[], None],
 ) -> None:
     is_process_channel = (
         channel.selector.process_id is not None or channel.selector.process_name is not None

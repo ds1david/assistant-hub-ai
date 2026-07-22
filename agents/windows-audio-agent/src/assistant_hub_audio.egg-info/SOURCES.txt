@@ -7,8 +7,6 @@ src/assistant_hub_audio/hotplug.py
 src/assistant_hub_audio/main.py
 src/assistant_hub_audio/mmdevice.py
 src/assistant_hub_audio/mmdevice_notifications.py
-src/assistant_hub_audio/process_capture.py
-src/assistant_hub_audio/process_resolver.py
 src/assistant_hub_audio/profiles.py
 src/assistant_hub_audio.egg-info/PKG-INFO
 src/assistant_hub_audio.egg-info/SOURCES.txt
@@ -20,6 +18,5 @@ tests/test_capture.py
 tests/test_capture_channel.py
 tests/test_endpoints.py
 tests/test_hotplug.py
-tests/test_process_resolver.py
 tests/test_profiles.py
 tests/test_run_agent.py
