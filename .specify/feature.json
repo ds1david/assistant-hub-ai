@@ -1,3 +1,3 @@
 {
-  "feature_directory": "specs/011-default-mic-wasapi-aware"
+  "feature_directory": "specs/012-issue-28-align-audio-agent-cli-version"
 }

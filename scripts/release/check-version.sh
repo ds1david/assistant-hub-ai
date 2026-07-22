@@ -52,6 +52,18 @@ PY
   check "windows-audio-agent pyproject" "${agent_ver:-<ausente>}"
 fi
 
+# Agent CLI (__init__.py __version__, fonte usada por main.py --version)
+if [[ -f agents/windows-audio-agent/src/assistant_hub_audio/__init__.py ]]; then
+  agent_cli_ver="$(python3 - <<'PY'
+import re, pathlib
+text = pathlib.Path("agents/windows-audio-agent/src/assistant_hub_audio/__init__.py").read_text(encoding="utf-8")
+m = re.search(r'(?m)^__version__\s*=\s*["\']([^"\']+)["\']', text)
+print(m.group(1) if m else "")
+PY
+)"
+  check "windows-audio-agent __init__.py" "${agent_cli_ver:-<ausente>}"
+fi
+
 # CI assert (se existir literal)
 if [[ -f .github/workflows/ci.yml ]]; then
   ci_ver="$(grep -oE "app\.version == ['\"][^'\"]+['\"]" .github/workflows/ci.yml | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"]/\1/" || true)"

@@ -5,16 +5,15 @@ import json
 import logging
 from pathlib import Path
 
+from . import __version__
 from .capture import run_agent, run_channel_worker
 from .devices import list_devices, resolve_profile
 from .profiles import channel_from_dict, default_profile, load_profile
 
-VERSION = "0.1.7"
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Assistant Hub AI Windows audio agent")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--log-level", default="INFO", help="Logging level (default: INFO)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
