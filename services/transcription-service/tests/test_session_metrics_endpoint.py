@@ -139,7 +139,15 @@ def test_retention_limit_is_enforced_over_http(fake_engine) -> None:
     registry = LatencyMetricsRegistry(max_samples_per_channel=3)
     client = TestClient(
         create_app(
-            settings=make_test_settings(),
+            # overlap=0 so 5 whole-window sends map 1:1 to 5 emitted events.
+            # With the default overlap (0.1s over a 0.4s step), 5 windows of
+            # 0.5s each leave a growing remainder that crosses
+            # whisper_min_audio_seconds and gets flushed as a 6th event on
+            # disconnect - correct sliding-window math (2.5s of audio at a
+            # 0.4s step yields 6 windows), not a bug, but irrelevant noise
+            # for a test that's only about the sampleCount/totalEvents
+            # retention-cap behavior.
+            settings=make_test_settings(whisper_overlap_seconds=0.0),
             engine=fake_engine,
             metrics_registry=registry,
         )
