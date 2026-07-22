@@ -46,14 +46,14 @@ public class SessionController {
     }
 
     @GetMapping("/sessions/{id}")
-    public ConversationSession get(@PathVariable UUID id) {
+    public ConversationSession get(@PathVariable("id") UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     }
 
     @PostMapping("/sessions/{id}/events")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public HubEvent append(@PathVariable UUID id, @RequestBody AppendEventRequest request) {
+    public HubEvent append(@PathVariable("id") UUID id, @RequestBody AppendEventRequest request) {
         repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
         HubEvent event = HubEvent.now(id, request.type(), request.source(), request.payload());
@@ -62,7 +62,7 @@ public class SessionController {
     }
 
     @GetMapping("/sessions/{id}/events")
-    public List<HubEvent> events(@PathVariable UUID id) {
+    public List<HubEvent> events(@PathVariable("id") UUID id) {
         repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
         return repository.events(id);
