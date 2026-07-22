@@ -13,6 +13,7 @@ from assistant_hub_audio.hotplug import (
     HotplugListener,
     NullNotificationProvider,
 )
+from assistant_hub_audio.mmdevice_notifications import _NotificationCallbacks
 
 
 class FakeNotificationProvider:
@@ -215,6 +216,81 @@ def test_windows_registration_failure_degrades_to_null_without_raising(
     assert isinstance(provider, NullNotificationProvider)
     assert "comtypes" not in sys.modules
     assert "pycaw" not in sys.modules
+
+
+# --- _NotificationCallbacks arity/degrade (SF-019 Issue #22, FR-001/FR-002/FR-003) ---
+
+
+def test_notification_callbacks_accept_this_without_type_error() -> None:
+    """Bug A regression: comtypes always dispatches STDMETHOD-declared
+
+    interface methods with the raw `this` pointer as the first argument
+    (research.md §1) - each callback must accept it without a TypeError.
+    """
+    events: list[HotplugEvent] = []
+    callbacks = _NotificationCallbacks(events.append)
+
+    callbacks.IMMNotificationClient_OnDeviceAdded(None, "EP1")
+    callbacks.IMMNotificationClient_OnDeviceRemoved(None, "EP1")
+    callbacks.IMMNotificationClient_OnDeviceStateChanged(None, "EP1", 0x1)
+    callbacks.IMMNotificationClient_OnDefaultDeviceChanged(None, 0, 0, "EP1")
+    callbacks.IMMNotificationClient_OnPropertyValueChanged(None, "EP1", object())
+
+    assert len(events) == 3
+
+
+def test_notification_callbacks_map_device_added_and_removed() -> None:
+    events: list[HotplugEvent] = []
+    callbacks = _NotificationCallbacks(events.append)
+
+    callbacks.IMMNotificationClient_OnDeviceAdded(None, "EP1")
+    callbacks.IMMNotificationClient_OnDeviceRemoved(None, "EP2")
+
+    assert [(e.endpoint_id, e.event_type) for e in events] == [("EP1", "arrived"), ("EP2", "removed")]
+
+
+def test_notification_callbacks_state_changed_notpresent_maps_to_removed() -> None:
+    """SF-019 Issue #22 Bug A/FR-003: once the callback is reachable, a
+
+    `notpresent` (0x4) state change must still translate to a `removed`
+    HotplugEvent, exactly as already specified for `state_changed` in
+    specs/006-sf-019-hotplug-listener/.
+    """
+    events: list[HotplugEvent] = []
+    callbacks = _NotificationCallbacks(events.append)
+
+    callbacks.IMMNotificationClient_OnDeviceStateChanged(None, "EP1", 0x4)
+
+    assert len(events) == 1
+    assert events[0].endpoint_id == "EP1"
+    assert events[0].event_type == "removed"
+
+
+def test_notification_callbacks_state_changed_active_maps_to_arrived() -> None:
+    events: list[HotplugEvent] = []
+    callbacks = _NotificationCallbacks(events.append)
+
+    callbacks.IMMNotificationClient_OnDeviceStateChanged(None, "EP1", 0x1)
+
+    assert events[0].event_type == "arrived"
+
+
+def test_notification_callbacks_swallow_on_event_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """FR-002: a callback must never propagate an exception into COM."""
+
+    def _raising_on_event(event: HotplugEvent) -> None:
+        raise RuntimeError("boom")
+
+    callbacks = _NotificationCallbacks(_raising_on_event)
+
+    with caplog.at_level("WARNING"):
+        callbacks.IMMNotificationClient_OnDeviceAdded(None, "EP1")  # must not raise
+        callbacks.IMMNotificationClient_OnDeviceRemoved(None, "EP1")  # must not raise
+        callbacks.IMMNotificationClient_OnDeviceStateChanged(None, "EP1", 0x4)  # must not raise
+
+    assert sum("callback failed" in message for message in caplog.messages) == 3
 
 
 # --- Isolation from endpoints.py correlation logic (US3) --------------------

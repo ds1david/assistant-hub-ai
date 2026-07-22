@@ -104,6 +104,81 @@ def test_endpoint_resolution_error_is_not_retried(monkeypatch: pytest.MonkeyPatc
     assert calls["count"] == 1
 
 
+def test_endpoint_resolution_error_after_prior_success_is_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SF-019 Issue #22 Bug B/FR-004: once a channel has captured successfully
+
+    at least once, a later resolution failure (e.g. a transient `notpresent`
+    right after an unplug) must not kill the worker - it falls back to the
+    generic reconnect backoff instead of exiting, unlike a resolution failure
+    that has never succeeded (test_endpoint_resolution_error_is_not_retried,
+    FR-005, unaffected by this change).
+    """
+    calls = {"count": 0}
+
+    def _fake_capture_once(*, stop_event: threading.Event, **_kwargs: Any) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return  # first attempt succeeds
+        if calls["count"] == 2:
+            raise capture.EndpointResolutionError("endpoint exists but is notpresent")
+        stop_event.set()
+
+    monkeypatch.setattr(capture, "_capture_once", _fake_capture_once)
+
+    stop_event = threading.Event()
+    stop_event.wait = lambda timeout=None: False  # type: ignore[method-assign]
+
+    capture.capture_channel(
+        audio=None,
+        channel=_channel(),
+        session_id="s1",
+        server_url="ws://example.invalid",
+        stop_event=stop_event,
+        record_path=None,
+    )
+    assert calls["count"] == 3
+
+
+def test_notpresent_retry_resumes_on_arrival(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SF-019 Issue #22 Bug B/FR-004 integration: after a transient
+
+    `notpresent` failure following a prior successful capture, an arrival
+    notification wakes the reconnect wait and resumes on the same
+    `endpointId` - the same behavior already specified for
+    `EndpointRemovedError` (spec 006,
+    test_capture_channel_resumes_on_arrival_after_removal).
+    """
+    channel = _channel_with_endpoint("EP1")
+    seen_endpoint_ids: list[str | None] = []
+
+    def _fake_capture_once(
+        *, channel: AudioChannel, signal: ChannelHotplugSignal, stop_event: threading.Event, **_kwargs: Any
+    ) -> None:
+        seen_endpoint_ids.append(channel.selector.endpoint_id)
+        if len(seen_endpoint_ids) == 1:
+            return  # first attempt succeeds -> resolved_at_least_once becomes True
+        if len(seen_endpoint_ids) == 2:
+            signal.handle_event(HotplugEvent("EP1", "arrived", 0.0))
+            raise capture.EndpointResolutionError("endpoint exists but is notpresent")
+        stop_event.set()
+
+    monkeypatch.setattr(capture, "_capture_once", _fake_capture_once)
+    stop_event = threading.Event()
+    stop_event.wait = lambda timeout=None: False  # type: ignore[method-assign]
+
+    capture.capture_channel(
+        audio=None,
+        channel=channel,
+        session_id="s1",
+        server_url="ws://example.invalid",
+        stop_event=stop_event,
+        record_path=None,
+    )
+    assert seen_endpoint_ids == ["EP1", "EP1", "EP1"]
+
+
 def test_transient_error_is_retried_with_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
     """A non-resolution error (e.g. a dropped WebSocket) is transient and
     should keep retrying instead of killing the channel."""
