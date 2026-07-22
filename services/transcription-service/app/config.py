@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     transcript_max_channels: int = 64
     transcript_overlap_tail_words: int = 12
 
+    # Janela adaptativa por métricas de latência (SF-022). Desabilitada por padrão —
+    # com a flag desligada o comportamento é idêntico ao whisper_window_seconds estático.
+    adaptive_window_enabled: bool = False
+    adaptive_window_min_seconds: float = 1.6
+    adaptive_window_latency_high_ms: int = 1600
+    adaptive_window_latency_low_ms: int = 600
+    adaptive_window_step_seconds: float = 0.4
+    adaptive_window_stable_evaluations: int = 3
+    adaptive_window_min_samples: int = 5
+
     model_cache_dir: Path = Path("/models")
     sample_rate: int = 16_000
     log_level: str = "INFO"

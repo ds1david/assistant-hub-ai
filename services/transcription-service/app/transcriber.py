@@ -118,6 +118,12 @@ class StreamingTranscriber:
         # Mono signed PCM16.
         return int(seconds * self._settings.sample_rate * 2)
 
+    def set_window_seconds(self, seconds: float) -> None:
+        window_bytes = self._seconds_to_bytes(seconds)
+        if self._overlap_bytes >= window_bytes:
+            raise ValueError("adaptive window must stay above the configured overlap")
+        self._window_bytes = window_bytes
+
     def append(self, chunk: bytes) -> bytes | None:
         self._buffer.extend(chunk)
         if len(self._buffer) < self._window_bytes:

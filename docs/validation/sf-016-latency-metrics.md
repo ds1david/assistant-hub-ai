@@ -10,6 +10,7 @@ Evidência automatizada das métricas de latência por sessão e canal sem GPU, 
 - o registro acontece em um único ponto de `app/main.py`, após a entrega do evento (`send_json` + `broadcaster.publish`) — transcrições suprimidas pelo eco e o fan-out por cliente do feed não contam;
 - `create_app(settings=None, engine=None, metrics_registry=None)` injeta o registry; sem argumento, cada app cria a própria instância (nenhum estado global);
 - `GET /v1/sessions/{sessionId}/metrics` responde `sessionId`, `generatedAt`, `maxSamplesPerChannel` e `channels[]` com `sampleCount`, `p50Ms`, `p95Ms`, `minMs`, `maxMs`, `avgMs`, `totalEvents`, `droppedWindows` e `lastEventAt`; sessão desconhecida responde 200 com `channels: []`.
+- (SF-022) o mesmo `channels[]` ganhou um campo aditivo `windowMs` — a janela de captura/segmentação atualmente aplicada ao canal pela política de janela adaptativa (`app/adaptive_window.py`), ou `null` quando a flag `adaptive_window_enabled` está desabilitada (padrão) ou o canal ainda não avaliou nenhuma vez. Este endpoint não é um contrato versionado (ao contrário de `transcript-event.v2`), então o campo aditivo não exige ADR nem quebra consumidores existentes — ver `docs/validation/sf-022-adaptive-window.md`.
 
 ## Onde
 
