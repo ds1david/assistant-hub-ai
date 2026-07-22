@@ -70,7 +70,11 @@ def list_devices(provider: EndpointProvider | None = None) -> list[dict[str, Any
 
 
 def default_microphone(audio: pyaudio.PyAudio) -> dict[str, Any]:
-    return _normalized_device(dict(audio.get_default_input_device_info()))
+    wasapi_info = audio.get_host_api_info_by_type(pyaudio.paWASAPI)
+    default_index = int(wasapi_info.get("defaultInputDevice", -1))
+    if default_index < 0:
+        raise RuntimeError("Default WASAPI input device was not found")
+    return _normalized_device(dict(audio.get_device_info_by_index(default_index)))
 
 
 def default_loopback(audio: pyaudio.PyAudio) -> dict[str, Any]:
