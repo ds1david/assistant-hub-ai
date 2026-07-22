@@ -166,6 +166,13 @@ def capture_channel(
         # re-resolution right after an arrival is treated as if the
         # notification hadn't happened, not as a fatal misconfiguration.
         woke_on_arrival = False
+        # True once this channel has captured successfully at least once.
+        # Distinguishes a transient `notpresent` unplug (SF-019 Issue #22 Bug
+        # B) - which must not kill the worker - from a resolution failure
+        # that has never succeeded (bad index/nameRegex, or an endpointId
+        # that never existed), which must keep failing fast per SF-018
+        # (FR-004/FR-005).
+        resolved_at_least_once = False
 
         def _retry_after_wait() -> bool:
             nonlocal reconnect_delay, woke_on_arrival
@@ -191,17 +198,25 @@ def capture_channel(
             except KeyboardInterrupt:
                 stop_event.set()
             except EndpointResolutionError:
-                if not woke_on_arrival:
+                if resolved_at_least_once:
+                    LOGGER.warning(
+                        "Endpoint resolution failed for channel=%s after a prior successful "
+                        "capture (likely a transient unplug/notpresent); falling back to the "
+                        "generic reconnect backoff instead of exiting.",
+                        channel.channel_id,
+                    )
+                elif not woke_on_arrival:
                     LOGGER.error(
                         "Endpoint resolution failed permanently for channel=%s; not retrying.",
                         channel.channel_id,
                     )
                     raise
-                LOGGER.warning(
-                    "Endpoint still not resolvable right after an arrival notification for "
-                    "channel=%s; falling back to the generic reconnect backoff.",
-                    channel.channel_id,
-                )
+                else:
+                    LOGGER.warning(
+                        "Endpoint still not resolvable right after an arrival notification for "
+                        "channel=%s; falling back to the generic reconnect backoff.",
+                        channel.channel_id,
+                    )
                 if _retry_after_wait():
                     return
             except EndpointRemovedError as exc:
@@ -215,6 +230,7 @@ def capture_channel(
             else:
                 reconnect_delay = 1.0
                 woke_on_arrival = False
+                resolved_at_least_once = True
     finally:
         listener.close()
 

@@ -24,6 +24,64 @@ def _event_type_for_state(new_state: int) -> str:
     return "arrived" if new_state == _DEVICE_STATE_ACTIVE else "removed"
 
 
+class _NotificationCallbacks:
+    """`IMMNotificationClient` callback method bodies (SF-019 Issue #22 Bug A).
+
+    Deliberately comtypes-free (no import of `comtypes`/`ctypes.wintypes` at
+    class-definition time) so the exact method signatures - each accepting an
+    unused `this` (the raw COM interface pointer) as the first argument after
+    `self` - are unit-testable on any platform, without COM.
+
+    `IMMNotificationClient` is declared via `comtypes.STDMETHOD` (no
+    paramflags - see `_build_notification_client_interface`), so comtypes
+    always dispatches these methods with the raw vtable arguments, `this`
+    first, instead of stripping it. Confirmed against comtypes' own
+    `_vtbl.py::hack()`/`catch_errors` and its `IClassFactory` test
+    (`comtypes/test/test_comobject.py`), which use the identical
+    `self, this, ...` shape for the same STDMETHOD-declared-interface reason
+    (research.md §1). `COMObject.__new__` looks up these methods via
+    `getattr` before `__init__` runs, so `on_event` not being bound yet at
+    that point is safe - it is only read once a real callback fires.
+    """
+
+    def __init__(self, on_event) -> None:  # noqa: ANN001 - Callable[[HotplugEvent], None]
+        self._on_event = on_event
+
+    def IMMNotificationClient_OnDeviceAdded(self, this, device_id: str) -> None:
+        try:
+            self._on_event(
+                HotplugEvent(endpoint_id=str(device_id), event_type="arrived", timestamp=time.monotonic())
+            )
+        except Exception as exc:  # noqa: BLE001 - callback must never raise into COM
+            LOGGER.warning("Hot-plug OnDeviceAdded callback failed: %s", exc)
+
+    def IMMNotificationClient_OnDeviceRemoved(self, this, device_id: str) -> None:
+        try:
+            self._on_event(
+                HotplugEvent(endpoint_id=str(device_id), event_type="removed", timestamp=time.monotonic())
+            )
+        except Exception as exc:  # noqa: BLE001 - callback must never raise into COM
+            LOGGER.warning("Hot-plug OnDeviceRemoved callback failed: %s", exc)
+
+    def IMMNotificationClient_OnDeviceStateChanged(self, this, device_id: str, new_state: int) -> None:
+        try:
+            self._on_event(
+                HotplugEvent(
+                    endpoint_id=str(device_id),
+                    event_type=_event_type_for_state(int(new_state)),
+                    timestamp=time.monotonic(),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - callback must never raise into COM
+            LOGGER.warning("Hot-plug OnDeviceStateChanged callback failed: %s", exc)
+
+    def IMMNotificationClient_OnDefaultDeviceChanged(self, this, *_args: object) -> None:
+        return None
+
+    def IMMNotificationClient_OnPropertyValueChanged(self, this, *_args: object) -> None:
+        return None
+
+
 def _build_notification_client_interface() -> type:
     """Hand-roll the `IMMNotificationClient` COM interface (mmdeviceapi.h).
 
@@ -71,41 +129,10 @@ class MMDeviceNotificationProvider:
 
         IMMNotificationClient = _build_notification_client_interface()
 
-        class _NotificationClient(COMObject):
+        class _NotificationClient(COMObject, _NotificationCallbacks):
             _com_interfaces_ = [IMMNotificationClient]
 
-            def IMMNotificationClient_OnDeviceAdded(self, device_id: str) -> None:
-                on_event(
-                    HotplugEvent(
-                        endpoint_id=str(device_id), event_type="arrived", timestamp=time.monotonic()
-                    )
-                )
-
-            def IMMNotificationClient_OnDeviceRemoved(self, device_id: str) -> None:
-                on_event(
-                    HotplugEvent(
-                        endpoint_id=str(device_id), event_type="removed", timestamp=time.monotonic()
-                    )
-                )
-
-            def IMMNotificationClient_OnDeviceStateChanged(
-                self, device_id: str, new_state: int
-            ) -> None:
-                on_event(
-                    HotplugEvent(
-                        endpoint_id=str(device_id),
-                        event_type=_event_type_for_state(int(new_state)),
-                        timestamp=time.monotonic(),
-                    )
-                )
-
-            def IMMNotificationClient_OnDefaultDeviceChanged(self, *_args: object) -> None:
-                return None
-
-            def IMMNotificationClient_OnPropertyValueChanged(self, *_args: object) -> None:
-                return None
-
-        self._client = _NotificationClient()
+        self._client = _NotificationClient(on_event)
         self._enumerator.RegisterEndpointNotificationCallback(self._client)
 
     def close(self) -> None:
