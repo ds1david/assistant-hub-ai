@@ -14,6 +14,16 @@ mesma infraestrutura COM já carregada para `list_endpoints()`/`default_endpoint
 `mmdevice.py` cobre `IMMNotificationClient`, sem dependência nova. Reaproveitar o mesmo enumerator
 evita um segundo objeto COM por processo.
 
+**Correção (SF-019, validação Windows 2026-07-22)**: a premissa acima estava incompleta —
+`pycaw`/`comtypes` resolvem os wrappers de `IMMDeviceEnumerator`/`IMMDevice` (usados em
+`mmdevice.py`), mas não vendorizam `IMMNotificationClient`. A implementação original importava esse
+tipo de `comtypes.gen.MMDeviceAPILib`, módulo que só existe se `comtypes.client.GetModule` conseguir
+gerar a partir do typelib de `mmdevapi.dll` — e essa DLL não embute typelib, então o import falhava em
+runtime real (`ModuleNotFoundError`), derrubando o worker em `HotplugListener.__init__`. Correção:
+`IMMNotificationClient` agora é definido manualmente em `mmdevice_notifications.py`
+(IID fixo do SDK + `comtypes.STDMETHOD`), sem depender de geração de typelib. Ver
+`docs/validation/sf-019-windows.md`.
+
 **Alternatives considered**:
 - **Polling periódico** (repetir `list_endpoints()` a cada N segundos e diffar estado): rejeitado — a
   issue #13 pede explicitamente um "listener nativo", e polling reintroduziria a mesma latência que

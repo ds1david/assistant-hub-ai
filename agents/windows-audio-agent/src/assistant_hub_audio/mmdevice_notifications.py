@@ -24,6 +24,38 @@ def _event_type_for_state(new_state: int) -> str:
     return "arrived" if new_state == _DEVICE_STATE_ACTIVE else "removed"
 
 
+def _build_notification_client_interface() -> type:
+    """Hand-roll the `IMMNotificationClient` COM interface (mmdeviceapi.h).
+
+    `mmdevapi.dll` ships no embedded typelib, so `comtypes.client.GetModule`
+    cannot generate `comtypes.gen.MMDeviceAPILib` (SF-019, see
+    docs/validation/sf-019-windows.md) and neither pycaw nor comtypes vendor a
+    pre-built wrapper for this specific interface. The IID and method order
+    below are fixed by the Windows SDK ABI, not by any generated stub, so
+    defining them literally removes the typelib-generation dependency
+    entirely instead of working around its absence.
+    """
+    from ctypes import HRESULT, Structure, c_uint32, c_wchar_p
+    from ctypes.wintypes import DWORD
+
+    from comtypes import GUID, IUnknown, STDMETHOD
+
+    class _PROPERTYKEY(Structure):
+        _fields_ = [("fmtid", GUID), ("pid", DWORD)]
+
+    class IMMNotificationClient(IUnknown):
+        _iid_ = GUID("{7991EEC9-7E89-4D85-8390-6C703CEC60C0}")
+        _methods_ = [
+            STDMETHOD(HRESULT, "OnDeviceStateChanged", [c_wchar_p, DWORD]),
+            STDMETHOD(HRESULT, "OnDeviceAdded", [c_wchar_p]),
+            STDMETHOD(HRESULT, "OnDeviceRemoved", [c_wchar_p]),
+            STDMETHOD(HRESULT, "OnDefaultDeviceChanged", [c_uint32, c_uint32, c_wchar_p]),
+            STDMETHOD(HRESULT, "OnPropertyValueChanged", [c_wchar_p, _PROPERTYKEY]),
+        ]
+
+    return IMMNotificationClient
+
+
 class MMDeviceNotificationProvider:
     def __init__(self) -> None:
         from comtypes import COMObject
@@ -36,7 +68,8 @@ class MMDeviceNotificationProvider:
 
     def subscribe(self, on_event) -> None:  # noqa: ANN001 - Callable[[HotplugEvent], None]
         from comtypes import COMObject
-        from comtypes.gen.MMDeviceAPILib import IMMNotificationClient
+
+        IMMNotificationClient = _build_notification_client_interface()
 
         class _NotificationClient(COMObject):
             _com_interfaces_ = [IMMNotificationClient]
