@@ -1,0 +1,24 @@
+version: 1
+name: process-capture-example
+server: ws://127.0.0.1:8001
+channels:
+  - id: local_microphone
+    label: Meu microfone
+    kind: input
+    device:
+      default: true
+    processing:
+      gainDb: 0
+      noiseGateDb: -38
+
+  # SF-020: captura isolada do áudio de um aplicativo específico (WASAPI
+  # loopback por processo), em vez do dispositivo de saída inteiro. Alvo por
+  # nome (re-segue automaticamente se o app reiniciar, FR-012) ou por PID
+  # (identidade exata, sem re-seguir, FR-006) - nunca os dois ao mesmo tempo.
+  - id: app_audio
+    label: Áudio do aplicativo alvo
+    kind: loopback
+    device:
+      processName: chrome.exe
+    processing:
+      gainDb: 0
