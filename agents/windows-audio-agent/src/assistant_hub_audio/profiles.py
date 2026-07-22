@@ -16,25 +16,41 @@ class DeviceSelector:
     index: int | None = None
     name_regex: str | None = None
     use_default: bool = False
+    process_id: int | None = None
+    process_name: str | None = None
 
     def validate(self) -> None:
         configured = sum(
             value is not None and value is not False
-            for value in (self.endpoint_id, self.index, self.name_regex, self.use_default)
+            for value in (
+                self.endpoint_id,
+                self.index,
+                self.name_regex,
+                self.use_default,
+                self.process_id,
+                self.process_name,
+            )
         )
         # endpointId may coexist with index: older agents ignore the unknown
         # endpointId key and keep using the index, newer agents prefer the
-        # endpointId. Any other combination stays exclusive.
+        # endpointId. Any other combination stays exclusive - including
+        # process_id/process_name, which never coexist with a device selector
+        # nor with each other (SF-020).
         endpoint_with_index = self.endpoint_id is not None and self.index is not None
         if configured == 0 or (configured > 1 and not (configured == 2 and endpoint_with_index)):
             raise ValueError(
                 "A device selector must define exactly one of: endpointId, index, nameRegex, "
-                "default (endpointId may additionally be combined with index)"
+                "default, processId, processName (endpointId may additionally be combined with "
+                "index)"
             )
         if self.endpoint_id is not None and not self.endpoint_id.strip():
             raise ValueError("device.endpointId cannot be blank")
         if self.name_regex is not None:
             re.compile(self.name_regex)
+        if self.process_id is not None and self.process_id <= 0:
+            raise ValueError("device.processId must be a positive integer")
+        if self.process_name is not None and not self.process_name.strip():
+            raise ValueError("device.processName cannot be blank")
 
 
 @dataclass(frozen=True)
@@ -104,6 +120,8 @@ def _selector_from_dict(data: dict[str, Any]) -> DeviceSelector:
         index=int(data["index"]) if data.get("index") is not None else None,
         name_regex=str(data["nameRegex"]) if data.get("nameRegex") is not None else None,
         use_default=bool(data.get("default", False)),
+        process_id=int(data["processId"]) if data.get("processId") is not None else None,
+        process_name=str(data["processName"]) if data.get("processName") is not None else None,
     )
 
 
@@ -127,6 +145,10 @@ def channel_to_dict(channel: AudioChannel) -> dict[str, Any]:
         selector["index"] = channel.selector.index
     if channel.selector.name_regex is not None:
         selector["nameRegex"] = channel.selector.name_regex
+    if channel.selector.process_id is not None:
+        selector["processId"] = channel.selector.process_id
+    if channel.selector.process_name is not None:
+        selector["processName"] = channel.selector.process_name
     if not selector:
         selector["default"] = channel.selector.use_default
 

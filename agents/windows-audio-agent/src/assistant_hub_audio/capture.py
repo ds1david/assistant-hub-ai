@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - PyAudioWPatch only ships wheels for Wi
 
 from .devices import resolve_device
 from .hotplug import ChannelHotplugSignal, HotplugListener, get_notification_provider
+from .process_resolver import process_is_alive, resolve_process
 from .profiles import AudioChannel, AudioProfile, channel_to_dict
 
 LOGGER = logging.getLogger(__name__)
@@ -114,6 +115,21 @@ class EndpointRemovedError(RuntimeError):
     """
 
 
+class ProcessExitedError(RuntimeError):
+    """The target process of a process-based channel exited mid-capture.
+
+    Handled distinctly from EndpointResolutionError/EndpointRemovedError
+    (SF-020): permanent for a channel selected by PID (FR-006 - PID is an
+    exact identity, no re-follow); for a channel selected by name, the next
+    `_capture_once` attempt re-resolves the name immediately (FR-012) - if
+    that re-resolution is itself ambiguous or finds nothing, it raises
+    EndpointResolutionError, which is always permanent for a process-based
+    channel regardless of any prior successful capture (FR-005/FR-012),
+    unlike the transient "notpresent after a prior success" policy that
+    applies to device-based channels (SF-019 Issue #22 Bug B).
+    """
+
+
 # Poll granularity for the reconnect wait: short enough that an "arrived"
 # notification (FR-003) wakes the wait promptly, without needing a combined
 # wait primitive across stop_event and signal.arrived.
@@ -191,6 +207,17 @@ def capture_channel(
             except KeyboardInterrupt:
                 stop_event.set()
             except EndpointResolutionError:
+                if channel.selector.process_id is not None or channel.selector.process_name is not None:
+                    # SF-020: a process-based channel's resolution failure is
+                    # always permanent - at startup (never resolved, FR-005),
+                    # or after a ProcessExitedError re-resolution that turned
+                    # out ambiguous/absent (FR-012) - never the device-only
+                    # "retry right after an arrival" relaxation below.
+                    LOGGER.error(
+                        "Process resolution failed permanently for channel=%s; not retrying.",
+                        channel.channel_id,
+                    )
+                    raise
                 if not woke_on_arrival:
                     LOGGER.error(
                         "Endpoint resolution failed permanently for channel=%s; not retrying.",
@@ -208,6 +235,24 @@ def capture_channel(
                 LOGGER.error("Endpoint removed for channel=%s: %s", channel.channel_id, exc)
                 if _retry_after_wait():
                     return
+            except ProcessExitedError as exc:
+                if channel.selector.process_id is not None:
+                    LOGGER.error(
+                        "Target process exited for channel=%s (selected by pid): %s; not retrying.",
+                        channel.channel_id,
+                        exc,
+                    )
+                    raise
+                LOGGER.warning(
+                    "Target process exited for channel=%s (selected by name): %s; "
+                    "re-resolving immediately.",
+                    channel.channel_id,
+                    exc,
+                )
+                # No _retry_after_wait(): the next while-loop iteration calls
+                # _capture_once again right away, which re-resolves
+                # process_name fresh (FR-012) - not the generic device
+                # reconnect backoff.
             except Exception as exc:
                 LOGGER.exception("Capture failed for channel=%s: %s", channel.channel_id, exc)
                 if _retry_after_wait():
@@ -230,19 +275,46 @@ def _capture_once(
     chunk_size: int,
     signal: ChannelHotplugSignal,
 ) -> None:
-    try:
-        device: dict[str, Any] = resolve_device(audio, channel)
-    except Exception as exc:
-        raise EndpointResolutionError(str(exc)) from exc
+    is_process_channel = (
+        channel.selector.process_id is not None or channel.selector.process_name is not None
+    )
+    resolved_pid: int | None = None
+
+    if is_process_channel:
+        try:
+            resolution = resolve_process(channel.selector)
+        except Exception as exc:
+            raise EndpointResolutionError(str(exc)) from exc
+        resolved_pid = resolution.pid
+        # SF-020: no PortAudio index/MMDevice endpointId exists for a
+        # process-scoped IAudioClient (research.md §2/§5) - both stay None,
+        # already-nullable transcript-event.v2 fields (data-model.md), no
+        # contract change needed.
+        device: dict[str, Any] = {
+            "index": None,
+            "name": f"{resolution.name} (pid {resolution.pid})",
+            "maxInputChannels": 2,
+            "defaultSampleRate": 48_000,
+            "endpointId": None,
+        }
+    else:
+        try:
+            device = resolve_device(audio, channel)
+        except Exception as exc:
+            raise EndpointResolutionError(str(exc)) from exc
     channels = max(1, min(int(device["maxInputChannels"]), 2))
     source_rate = int(device["defaultSampleRate"])
 
     query_params = {
         "sourceType": channel.source_type,
         "deviceName": device["name"],
-        "deviceIndex": device["index"],
         "label": channel.label or channel.channel_id,
     }
+    # SF-020: a process-based channel's device["index"] is None (research.md
+    # §5/data-model.md) - omitted from the query, same as endpointId already
+    # was, instead of urlencode-ing the literal string "None".
+    if device["index"] is not None:
+        query_params["deviceIndex"] = device["index"]
     if device.get("endpointId"):
         query_params["endpointId"] = device["endpointId"]
     query = urlencode(query_params)
@@ -263,14 +335,21 @@ def _capture_once(
         endpoint,
     )
 
-    stream = audio.open(
-        format=pyaudio.paInt16,
-        channels=channels,
-        rate=source_rate,
-        input=True,
-        input_device_index=int(device["index"]),
-        frames_per_buffer=chunk_size,
-    )
+    if is_process_channel:
+        # SF-020: bypasses PyAudioWPatch/PortAudio entirely - there is no
+        # device index for a process-scoped IAudioClient (research.md §2).
+        from .process_capture import ProcessLoopbackStream
+
+        stream = ProcessLoopbackStream(resolved_pid, sample_rate=source_rate, channels=channels)
+    else:
+        stream = audio.open(
+            format=pyaudio.paInt16,
+            channels=channels,
+            rate=source_rate,
+            input=True,
+            input_device_index=int(device["index"]),
+            frames_per_buffer=chunk_size,
+        )
 
     try:
         with WavRecorder(record_path) as recorder, connect(
@@ -284,6 +363,11 @@ def _capture_once(
                     signal.removed.clear()
                     raise EndpointRemovedError(
                         f"Endpoint {channel.selector.endpoint_id!r} was removed while "
+                        f"channel={channel.channel_id} was capturing."
+                    )
+                if is_process_channel and not process_is_alive(resolved_pid):
+                    raise ProcessExitedError(
+                        f"Process pid={resolved_pid} ({device['name']}) exited while "
                         f"channel={channel.channel_id} was capturing."
                     )
                 raw = stream.read(chunk_size, exception_on_overflow=False)

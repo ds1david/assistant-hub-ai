@@ -191,6 +191,151 @@ channels:
     assert restored == original
 
 
+def test_loads_process_id_selector(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-process-id
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      processId: 8842
+""".strip(),
+        encoding="utf-8",
+    )
+
+    channel = load_profile(profile_path).channels[0]
+
+    assert channel.selector.process_id == 8842
+    assert channel.selector.process_name is None
+
+
+def test_loads_process_name_selector(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-process-name
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      processName: chrome.exe
+""".strip(),
+        encoding="utf-8",
+    )
+
+    channel = load_profile(profile_path).channels[0]
+
+    assert channel.selector.process_name == "chrome.exe"
+    assert channel.selector.process_id is None
+
+
+def test_rejects_process_id_combined_with_process_name(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-invalid-process
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      processId: 8842
+      processName: chrome.exe
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="device selector"):
+        load_profile(profile_path)
+
+
+def test_rejects_process_id_combined_with_endpoint_id(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        f"""
+version: 1
+name: test-invalid-process-endpoint
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      endpointId: "{ENDPOINT_ID}"
+      processId: 8842
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="device selector"):
+        load_profile(profile_path)
+
+
+def test_rejects_non_positive_process_id(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-invalid-process-id
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      processId: 0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="processId"):
+        load_profile(profile_path)
+
+
+def test_rejects_blank_process_name(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-invalid-process-name
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      processName: "  "
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="processName"):
+        load_profile(profile_path)
+
+
+def test_process_name_round_trips_through_worker_json(tmp_path: Path) -> None:
+    from assistant_hub_audio.profiles import channel_from_dict, channel_to_dict
+
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        """
+version: 1
+name: test-process-roundtrip
+channels:
+  - id: app_audio
+    kind: loopback
+    device:
+      processName: chrome.exe
+""".strip(),
+        encoding="utf-8",
+    )
+    original = load_profile(profile_path).channels[0]
+
+    serialized = channel_to_dict(original)
+    restored = channel_from_dict(serialized)
+
+    assert serialized["device"] == {"processName": "chrome.exe"}
+    assert restored == original
+
+
 def test_loads_channel_processing(tmp_path: Path) -> None:
     profile_path = tmp_path / "profile.yaml"
     profile_path.write_text(
