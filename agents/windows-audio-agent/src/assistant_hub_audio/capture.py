@@ -11,7 +11,7 @@ import threading
 import time
 import wave
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlencode
 
 import numpy as np
@@ -174,6 +174,10 @@ def capture_channel(
         # (FR-004/FR-005).
         resolved_at_least_once = False
 
+        def _mark_resolved() -> None:
+            nonlocal resolved_at_least_once
+            resolved_at_least_once = True
+
         def _retry_after_wait() -> bool:
             nonlocal reconnect_delay, woke_on_arrival
             outcome = _wait_for_reconnect(stop_event, signal, reconnect_delay)
@@ -194,6 +198,7 @@ def capture_channel(
                     record_path=record_path,
                     chunk_size=chunk_size,
                     signal=signal,
+                    on_resolved=_mark_resolved,
                 )
             except KeyboardInterrupt:
                 stop_event.set()
@@ -230,7 +235,6 @@ def capture_channel(
             else:
                 reconnect_delay = 1.0
                 woke_on_arrival = False
-                resolved_at_least_once = True
     finally:
         listener.close()
 
@@ -245,11 +249,19 @@ def _capture_once(
     record_path: Path | None,
     chunk_size: int,
     signal: ChannelHotplugSignal,
+    on_resolved: Callable[[], None],
 ) -> None:
     try:
         device: dict[str, Any] = resolve_device(audio, channel)
     except Exception as exc:
         raise EndpointResolutionError(str(exc)) from exc
+    # Signal success as soon as resolution succeeds, not only when this whole
+    # call returns without raising: the read loop below runs until stop_event
+    # is set, an unplug, or a stream error - it never "returns cleanly after
+    # capturing a while" on its own, so the caller's success flag has to be
+    # set here to distinguish a later notpresent failure from one that has
+    # never resolved (SF-019 Issue #22 Bug B, FR-004/FR-005).
+    on_resolved()
     channels = max(1, min(int(device["maxInputChannels"]), 2))
     source_rate = int(device["defaultSampleRate"])
 

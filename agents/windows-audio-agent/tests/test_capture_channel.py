@@ -117,10 +117,13 @@ def test_endpoint_resolution_error_after_prior_success_is_retried(
     """
     calls = {"count": 0}
 
-    def _fake_capture_once(*, stop_event: threading.Event, **_kwargs: Any) -> None:
+    def _fake_capture_once(
+        *, stop_event: threading.Event, on_resolved: Any, **_kwargs: Any
+    ) -> None:
         calls["count"] += 1
         if calls["count"] == 1:
-            return  # first attempt succeeds
+            on_resolved()  # mirrors the real _capture_once signaling success right after resolve
+            return
         if calls["count"] == 2:
             raise capture.EndpointResolutionError("endpoint exists but is notpresent")
         stop_event.set()
@@ -154,11 +157,17 @@ def test_notpresent_retry_resumes_on_arrival(monkeypatch: pytest.MonkeyPatch) ->
     seen_endpoint_ids: list[str | None] = []
 
     def _fake_capture_once(
-        *, channel: AudioChannel, signal: ChannelHotplugSignal, stop_event: threading.Event, **_kwargs: Any
+        *,
+        channel: AudioChannel,
+        signal: ChannelHotplugSignal,
+        stop_event: threading.Event,
+        on_resolved: Any,
+        **_kwargs: Any,
     ) -> None:
         seen_endpoint_ids.append(channel.selector.endpoint_id)
         if len(seen_endpoint_ids) == 1:
-            return  # first attempt succeeds -> resolved_at_least_once becomes True
+            on_resolved()  # mirrors the real _capture_once signaling success right after resolve
+            return
         if len(seen_endpoint_ids) == 2:
             signal.handle_event(HotplugEvent("EP1", "arrived", 0.0))
             raise capture.EndpointResolutionError("endpoint exists but is notpresent")
@@ -232,6 +241,7 @@ def test_capture_once_raises_endpoint_removed_error_on_removal(
             record_path=None,
             chunk_size=1024,
             signal=signal,
+            on_resolved=lambda: None,
         )
     # Ends right after the 2nd read set the flag, on the 3rd loop check -
     # not after a stream failure, and well before any generic backoff.
@@ -266,6 +276,7 @@ def test_capture_once_ignores_removal_for_foreign_endpoint(
         record_path=None,
         chunk_size=1024,
         signal=signal,
+        on_resolved=lambda: None,
     )
     assert stream.read_count >= 3
     assert not signal.removed.is_set()
