@@ -1,11 +1,13 @@
 package ai.assistanthub.core.transcript;
 
+import ai.assistanthub.core.memory.MemoryHubTestSupport;
 import ai.assistanthub.core.session.ConversationSession;
 import ai.assistanthub.core.session.SessionRepository;
 import ai.assistanthub.sdk.HubEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -18,6 +20,7 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -39,6 +42,9 @@ class TranscriptFeedClientHappyPathTest {
     @LocalServerPort
     private int port;
 
+    @TempDir
+    Path tempDir;
+
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final TranscriptEventValidator validator = new TranscriptEventValidator();
     private final TranscriptEventMapper mapper = new TranscriptEventMapper();
@@ -54,7 +60,7 @@ class TranscriptFeedClientHappyPathTest {
 
     @Test
     void partialThenFinalEventsAreBothRecordedInChronologicalOrder() throws Exception {
-        SessionRepository sessionRepository = new SessionRepository();
+        SessionRepository sessionRepository = new SessionRepository(MemoryHubTestSupport.newStore(tempDir));
         ConversationSession session = sessionRepository.save(
                 ConversationSession.create("Entrevista", "interview-technical", Map.of()));
 

@@ -11,3 +11,8 @@ management:
 session-core:
   transcript-ingestion:
     feed-url: ${SESSION_CORE_TRANSCRIPT_FEED_URL:ws://localhost:8001/ws/transcripts}
+  memory-hub:
+    path: ${SESSION_CORE_MEMORY_HUB_PATH:data/session-core/memory-hub.db}
+    # retention.max-age (ex.: 30d) e retention.max-sessions ficam sem valor por padrão:
+    # ausentes, a retenção de sessões ENDED é indefinida (ver specs/013-issue-29-memory-hub-persistence/data-model.md).
+    # Defina via SESSION_CORE_MEMORY_HUB_RETENTION_MAX_AGE / SESSION_CORE_MEMORY_HUB_RETENTION_MAX_SESSIONS para ativar o expurgo.

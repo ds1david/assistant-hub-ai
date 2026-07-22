@@ -30,3 +30,7 @@ htmlcov/
 .venv-agent/
 .venv-windows/
 *.egg-info/
+
+# Memory Hub — dado de sessão persistido localmente (P9, nunca commitado)
+data/session-core/*.db
+data/session-core/*.db-*
