@@ -68,8 +68,15 @@ capturou com sucesso ao menos uma vez antes), a falha é tratada como transitór
 `_retry_after_wait()` (mesmo caminho já usado por `EndpointRemovedError`), preservando o
 `endpointId` configurado. Se `resolved_at_least_once` for `False` (nunca resolveu, ainda no primeiro
 `_capture_once`), mantém o comportamento fatal/permanente atual (fail-fast de SF-018, FR-005).
-`resolved_at_least_once` é setado para `True` no primeiro `_capture_once` bem-sucedido (mesmo ponto
-onde `reconnect_delay`/`woke_on_arrival` já são resetados no `else` do laço principal).
+`resolved_at_least_once` é setado para `True` via um callback `on_resolved` passado a `_capture_once`,
+invocado logo após `resolve_device(...)` suceder — **não** no retorno de `_capture_once` inteira. O
+laço de leitura de stream dentro de `_capture_once` só retorna sem exceção quando `stop_event` é
+sinalizado (shutdown limpo); em um unplug real, a exceção nasce dentro do próprio loop de leitura e
+nunca alcança um retorno normal. Marcar o sucesso apenas no retorno completo (tentativa inicial deste
+fix, corrigida após revalidação manual Windows expor o problema — ver
+`docs/validation/sf-019-windows.md`) deixava `resolved_at_least_once` sempre `False` em qualquer sessão
+real que capturasse por mais de uma leitura antes do unplug, fazendo o Bug B parecer corrigido nos
+testes (que simulavam retorno limpo) mas não no runtime real.
 
 **Rationale**: o sintoma da issue #22 ("Endpoint ID '...' exists but is notpresent... failed
 permanently... not retrying") ocorre justamente porque a falha de resolução por `notpresent` chega
@@ -88,6 +95,11 @@ correto mesmo se `resolve_device`/`find_device_for_endpoint` mudar o texto da ex
 - **Tratar toda `EndpointResolutionError` como não-fatal (sempre retry)**: rejeitado — quebraria o
   fail-fast de SF-018 (P7 — sem fallback silencioso) para um `endpointId` que nunca existiu desde o
   startup; FR-005 exige preservar esse comportamento sem regressão.
+- **Marcar `resolved_at_least_once = True` no retorno normal de `_capture_once`** (tentativa inicial):
+  rejeitado após revalidação manual Windows mostrar que o Bug B persistia em runtime real, apesar da
+  suíte automatizada (que simula retorno limpo) passar — `_capture_once` só retorna sem exceção no
+  shutdown por `stop_event`, nunca "depois de capturar bem-sucedidamente por um tempo". Substituído pelo
+  callback `on_resolved`, invocado no ponto certo (logo após `resolve_device` suceder).
 - **Usar um contador de tentativas em vez de um booleano**: rejeitado — desnecessariamente complexo
   para o que a spec pede; o requisito é binário (já resolveu uma vez ou não), não um limite de
   tentativas.
