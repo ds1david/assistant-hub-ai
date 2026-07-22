@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from .adaptive_window import AdaptiveWindowChannel, AdaptiveWindowRegistry
 from .broadcast import TranscriptBroadcaster
 from .config import Settings, get_settings
 from .consolidation import TranscriptConsolidationRegistry
@@ -26,11 +27,15 @@ def create_app(
     engine: TranscriptionEngine | None = None,
     metrics_registry: LatencyMetricsRegistry | None = None,
     consolidator: TranscriptConsolidationRegistry | None = None,
+    adaptive_window_registry: AdaptiveWindowRegistry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     engine = engine or WhisperEngine(settings)
     metrics = metrics_registry or LatencyMetricsRegistry(
         max_samples_per_channel=settings.metrics_max_samples_per_channel,
+        max_channels=settings.metrics_max_channels,
+    )
+    adaptive_windows = adaptive_window_registry or AdaptiveWindowRegistry(
         max_channels=settings.metrics_max_channels,
     )
     consolidator = consolidator or TranscriptConsolidationRegistry(
@@ -105,6 +110,9 @@ def create_app(
 
         await websocket.accept()
         transcriber = StreamingTranscriber(settings, engine)
+        adaptive_window = (
+            AdaptiveWindowChannel(settings) if settings.adaptive_window_enabled else None
+        )
         windows: asyncio.Queue[tuple[bytes, bool] | None] = asyncio.Queue(maxsize=2)
         dropped_windows = 0
         LOGGER.info(
@@ -174,6 +182,37 @@ def create_app(
                 label=label,
                 latency_ms=result.latency_ms,
             )
+            if adaptive_window is not None:
+                session_snapshot = metrics.session_snapshot(session_id)
+                channel_snapshot = next(
+                    (
+                        channel
+                        for channel in session_snapshot.channels
+                        if channel.channel_id == channel_id
+                    ),
+                    None,
+                )
+                if channel_snapshot is not None:
+                    previous_window = adaptive_window.window_seconds
+                    new_window = adaptive_window.evaluate(
+                        p95_ms=channel_snapshot.p95_ms,
+                        sample_count=channel_snapshot.sample_count,
+                    )
+                    if new_window != previous_window:
+                        transcriber.set_window_seconds(new_window)
+                        LOGGER.info(
+                            "Adaptive window changed session=%s channel=%s previous=%.2fs new=%.2fs direction=%s",
+                            session_id,
+                            channel_id,
+                            previous_window,
+                            new_window,
+                            "down" if new_window < previous_window else "up",
+                        )
+                    adaptive_windows.record(
+                        session_id=session_id,
+                        channel_id=channel_id,
+                        window_seconds=new_window,
+                    )
             consolidator.ingest(
                 session_id=session_id,
                 channel_id=channel_id,
@@ -257,6 +296,9 @@ def create_app(
                     "droppedWindows": channel.dropped_windows,
                     "lastEventAt": (
                         channel.last_event_at.isoformat() if channel.last_event_at else None
+                    ),
+                    "windowMs": adaptive_windows.window_ms(
+                        session_id=session_id, channel_id=channel.channel_id
                     ),
                 }
                 for channel in snapshot.channels
