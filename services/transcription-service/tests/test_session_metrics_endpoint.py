@@ -111,6 +111,15 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
         "reuniao comeca as dez",
         "reuniao comeca as dez",
         "fala local diferente agora",
+        # Duas janelas cheias no mic deixam exatamente 2x overlap_seconds
+        # (== min_audio_seconds nestas settings) no buffer, o que já basta
+        # para o flush() do disconnect emitir uma janela final. Sem este
+        # 4o script, o fake engine cai no texto default e essa janela é
+        # contada como uma nova amostra (racy: só se manifesta quando o
+        # to_thread do flush termina antes do GET de metrics). Repetir o
+        # último texto garante que o transcriber a descarte por dedupe
+        # (StreamingTranscriber.transcribe_pcm) de forma determinística.
+        "fala local diferente agora",
     )
     with client.websocket_connect(
         "/ws/audio/sess-echo/system-main?sourceType=system"
