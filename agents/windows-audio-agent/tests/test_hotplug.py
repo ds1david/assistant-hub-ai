@@ -166,6 +166,30 @@ def test_listener_close_delegates_to_provider() -> None:
     assert provider.closed
 
 
+def test_listener_subscribe_failure_degrades_without_raising() -> None:
+    """SF-019 regression: a COM/import failure inside `subscribe()` (e.g. the
+    missing `comtypes.gen.MMDeviceAPILib` typelib module) must not propagate
+    out of `HotplugListener.__init__` and kill the channel worker."""
+
+    class _BrokenSubscribeProvider:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def subscribe(self, on_event: Callable[[HotplugEvent], None]) -> None:
+            raise ModuleNotFoundError("No module named 'comtypes.gen.MMDeviceAPILib'")
+
+        def close(self) -> None:
+            self.closed = True
+
+    provider = _BrokenSubscribeProvider()
+    signal = ChannelHotplugSignal(configured_endpoint_id="EP1")
+
+    listener = HotplugListener(provider, signal)  # must not raise
+
+    listener.close()
+    assert provider.closed
+
+
 # --- get_notification_provider degrade path (FR-006) ------------------------
 
 

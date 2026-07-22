@@ -2,7 +2,11 @@ pyproject.toml
 src/assistant_hub_audio/__init__.py
 src/assistant_hub_audio/capture.py
 src/assistant_hub_audio/devices.py
+src/assistant_hub_audio/endpoints.py
+src/assistant_hub_audio/hotplug.py
 src/assistant_hub_audio/main.py
+src/assistant_hub_audio/mmdevice.py
+src/assistant_hub_audio/mmdevice_notifications.py
 src/assistant_hub_audio/profiles.py
 src/assistant_hub_audio.egg-info/PKG-INFO
 src/assistant_hub_audio.egg-info/SOURCES.txt
@@ -11,4 +15,8 @@ src/assistant_hub_audio.egg-info/entry_points.txt
 src/assistant_hub_audio.egg-info/requires.txt
 src/assistant_hub_audio.egg-info/top_level.txt
 tests/test_capture.py
+tests/test_capture_channel.py
+tests/test_endpoints.py
+tests/test_hotplug.py
 tests/test_profiles.py
+tests/test_run_agent.py
