@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Assistant Hub AI — Shell",
+  "version": "0.1.0",
+  "identifier": "ai.assistanthub.desktopshell",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Assistant Hub AI — Shell",
+        "width": 1024,
+        "height": 768,
+        "minWidth": 640,
+        "minHeight": 480
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [],
+    "targets": ["msi", "nsis"],
+    "windows": {}
+  }
+}

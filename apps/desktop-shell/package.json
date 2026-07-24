@@ -1,0 +1,26 @@
+{
+  "name": "desktop-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Assistant Hub AI — shell desktop local (R5, issue #35)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "lint": "eslint src tests --ext .ts"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^5.4.20",
+    "vitest": "^2.1.9"
+  }
+}
