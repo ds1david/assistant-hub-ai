@@ -1,0 +1,32 @@
+[package]
+name = "desktop-shell"
+version = "0.1.0"
+edition = "2021"
+description = "Assistant Hub AI — shell desktop local (R5, issue #35)"
+
+[lib]
+name = "desktop_shell"
+path = "src/lib.rs"
+
+# O binário Tauri (main.rs) só é compilado com a feature "gui" habilitada — ver
+# specs/014-issue-35-desktop-tauri-shell-local/research.md, Decisão 7: o núcleo Tauri
+# (webview) exige toolchain nativa Windows (ou webkit2gtk no Linux, não instalado neste
+# WSL). A lib (config/session_core_client/agent_control) não depende de "tauri" e é
+# testável com `cargo test` neste ambiente sem GUI.
+[[bin]]
+name = "desktop-shell"
+path = "src/main.rs"
+required-features = ["gui"]
+
+[features]
+default = []
+gui = ["dep:tauri"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+sysinfo = "0.32"
+tauri = { version = "2", optional = true }
+
+[dev-dependencies]

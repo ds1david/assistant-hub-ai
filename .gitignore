@@ -34,3 +34,7 @@ htmlcov/
 # Memory Hub — dado de sessão persistido localmente (P9, nunca commitado)
 data/session-core/*.db
 data/session-core/*.db-*
+
+# Desktop shell (apps/desktop-shell) — frontend Node/Vite
+node_modules/
+dist/
