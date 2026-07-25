@@ -58,7 +58,7 @@ Template: [checklist-template.md](./checklist-template.md)
 | ID | Summary | Tracking | Issue / won’t-fix |
 |----|---------|----------|---------------------|
 | `InvocationResult-sourceType` | `sourceType` / InvocationResult consistency | `issue` | https://github.com/ds1david/assistant-hub-ai/issues/40 |
-| `frontend-vite-audit` | npm audit / Vite major | `issue` + won’t major this tag | https://github.com/ds1david/assistant-hub-ai/issues/41 — no Vite major bump in 0.2.0 |
+| `frontend-vite-audit` | npm audit / Vite major | `issue` + won’t major **this tag** (0.2.0); **follow-up #41 resolved** on feature branch | https://github.com/ds1david/assistant-hub-ai/issues/41 — tag 0.2.0 kept no major; post-tag upgrade + evidence `docs/validation/issue-41-frontend-npm-audit.md` |
 
 ---
 

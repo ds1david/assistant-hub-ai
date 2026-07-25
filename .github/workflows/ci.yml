@@ -138,11 +138,12 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: apps/desktop-shell/package-lock.json
-      - name: Frontend install, test, build
+      - name: Frontend install, test, build, lint
         run: |
           npm ci
           npm test
           npm run build
+          npm run lint
       - uses: dtolnay/rust-toolchain@stable
       - name: Rust lib tests (no GUI / no tauri build)
         working-directory: apps/desktop-shell/src-tauri

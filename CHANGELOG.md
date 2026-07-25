@@ -34,7 +34,11 @@ Not a new domain feature slice.
 | ID | Tracking |
 |----|----------|
 | `InvocationResult-sourceType` | [#40](https://github.com/ds1david/assistant-hub-ai/issues/40) — **resolved on branch `feature/issue-40-debt-invocationresult-sourcetype-consistency` / spec `017`** (server-resolved `sourceType` on invoke result + tests; close issue after merge) |
-| `frontend-vite-audit` | [#41](https://github.com/ds1david/assistant-hub-ai/issues/41) — **no Vite major bump in this tag** |
+| `frontend-vite-audit` | [#41](https://github.com/ds1david/assistant-hub-ai/issues/41) — **resolved on follow-up branch** (Vite 8 / Vitest 4 / ESLint 10; `npm audit` clean). Evidence: [`docs/validation/issue-41-frontend-npm-audit.md`](docs/validation/issue-41-frontend-npm-audit.md). Tag 0.2.0 itself did not major-bump Vite (FR-012 historical). Close issue after merge. |
+
+### Unreleased (post-0.2.0 debts)
+
+- **#41 frontend npm audit**: major toolchain upgrade in `apps/desktop-shell` (vite@8.1.5, vitest@4.1.10, eslint@10.8.0); evidence `docs/validation/issue-41-frontend-npm-audit.md`; CI `desktop-shell-smoke` runs `npm run lint`.
 
 ### Release process
 
