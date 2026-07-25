@@ -8,6 +8,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use desktop_shell::agent_control::{self, AgentStatus, ControlMode, ManagedAgentProcess};
+use desktop_shell::ai_provider_client::{
+    AiProviderClient, ConnectionTestResult, InvocationResult, Provider, SecretPreview,
+};
 use desktop_shell::config::{self, ShellConfig};
 use desktop_shell::session_core_client::{
     channel_status_views, session_status_view, transcript_feed_entries, ChannelStatusView,
@@ -119,6 +122,88 @@ fn get_shell_config(state: State<AppState>) -> ShellConfig {
     state.config.lock().unwrap().clone()
 }
 
+// -----------------------------------------------------------------------------------------
+// AI Provider Hub (R6, issue #37, US3) — todo acesso de rede fica aqui, nunca no webview,
+// mesmo padrão já usado acima para o session-core (specs/015-issue-37-ai-provider-hub).
+// -----------------------------------------------------------------------------------------
+
+fn ai_provider_client(state: &State<'_, AppState>) -> AiProviderClient {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    AiProviderClient::new(base_url)
+}
+
+#[tauri::command]
+fn list_ai_providers(state: State<AppState>) -> Result<Vec<Provider>, String> {
+    ai_provider_client(&state)
+        .list_providers()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_ai_provider(state: State<AppState>, provider: Provider) -> Result<Provider, String> {
+    ai_provider_client(&state)
+        .save_provider(&provider)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_ai_provider_enabled(
+    state: State<AppState>,
+    provider_id: String,
+    enabled: bool,
+) -> Result<Provider, String> {
+    ai_provider_client(&state)
+        .set_enabled(&provider_id, enabled)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_ai_provider(state: State<AppState>, provider_id: String) -> Result<(), String> {
+    ai_provider_client(&state)
+        .delete_provider(&provider_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_ai_provider_secret_preview(
+    state: State<AppState>,
+    provider_id: String,
+) -> Result<SecretPreview, String> {
+    ai_provider_client(&state)
+        .secret_preview(&provider_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn test_ai_provider_connection(
+    state: State<AppState>,
+    provider_id: String,
+) -> Result<ConnectionTestResult, String> {
+    ai_provider_client(&state)
+        .test_connection(&provider_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn invoke_ai_provider(
+    state: State<AppState>,
+    session_id: String,
+    channel_id: Option<String>,
+    route: String,
+    capability: String,
+    input: String,
+) -> Result<InvocationResult, String> {
+    ai_provider_client(&state)
+        .invoke(
+            &session_id,
+            channel_id.as_deref(),
+            &route,
+            &capability,
+            &input,
+        )
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -143,6 +228,13 @@ fn main() {
             start_agent,
             stop_agent,
             get_shell_config,
+            list_ai_providers,
+            save_ai_provider,
+            set_ai_provider_enabled,
+            delete_ai_provider,
+            get_ai_provider_secret_preview,
+            test_ai_provider_connection,
+            invoke_ai_provider,
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o shell desktop");

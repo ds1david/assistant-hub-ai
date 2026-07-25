@@ -58,6 +58,7 @@
         <targetPath>contracts</targetPath>
         <includes>
           <include>transcript-event.v2.schema.json</include>
+          <include>ai-provider-profile.v1.schema.json</include>
         </includes>
       </resource>
     </resources>

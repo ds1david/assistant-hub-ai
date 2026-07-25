@@ -16,3 +16,9 @@ session-core:
     # retention.max-age (ex.: 30d) e retention.max-sessions ficam sem valor por padrão:
     # ausentes, a retenção de sessões ENDED é indefinida (ver specs/013-issue-29-memory-hub-persistence/data-model.md).
     # Defina via SESSION_CORE_MEMORY_HUB_RETENTION_MAX_AGE / SESSION_CORE_MEMORY_HUB_RETENTION_MAX_SESSIONS para ativar o expurgo.
+  ai-provider-hub:
+    # config/ai-providers.yaml já é ignorado pelo Git (.gitignore, "AI provider local
+    # configuration and secrets") desde o bootstrap do repo — reaproveita esse caminho em vez
+    # de introduzir um novo em data/session-core/. Exemplo versionado em
+    # samples/ai-providers/providers.example.yaml.
+    path: ${SESSION_CORE_AI_PROVIDER_HUB_PATH:config/ai-providers.yaml}
