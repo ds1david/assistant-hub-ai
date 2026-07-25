@@ -77,6 +77,26 @@ describe("renderAiProviderPanel", () => {
     expect(resultEl?.textContent).toContain(expectedLabel);
   });
 
+  it("shows backend detail message alongside the error type label", () => {
+    const container = document.createElement("div");
+    const testResult: ConnectionTestResult = {
+      providerId: "real-1",
+      success: false,
+      errorType: "AUTHENTICATION",
+      message: "HTTP 403: The API key is disabled",
+    };
+
+    renderAiProviderPanel(
+      container,
+      { providers: [provider()], selectedProviderId: "real-1", testResult, secretPreview: null, error: null },
+      noopCallbacks,
+    );
+
+    const text = container.querySelector('[data-testid="ai-provider-test-result"]')?.textContent ?? "";
+    expect(text).toContain("autenticação");
+    expect(text).toContain("HTTP 403: The API key is disabled");
+  });
+
   it("calls onSave with the form values when the form is submitted", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

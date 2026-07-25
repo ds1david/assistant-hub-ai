@@ -50,7 +50,8 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
             InvocationErrorType errorType = classify(response.statusCode());
             return errorType == null
                     ? ConnectionTestResult.success(provider.id(), "conexão OK (" + response.statusCode() + ")")
-                    : ConnectionTestResult.failure(provider.id(), errorType, "HTTP " + response.statusCode());
+                    : ConnectionTestResult.failure(
+                            provider.id(), errorType, httpFailureMessage(response.statusCode(), response.body()));
         } catch (HttpTimeoutException e) {
             return ConnectionTestResult.failure(provider.id(), InvocationErrorType.TIMEOUT, "timeout ao testar conexão");
         } catch (IOException | InterruptedException e) {
@@ -74,7 +75,7 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
 
             InvocationErrorType errorType = classify(response.statusCode());
             if (errorType != null) {
-                return AdapterOutcome.failure(errorType, "HTTP " + response.statusCode());
+                return AdapterOutcome.failure(errorType, httpFailureMessage(response.statusCode(), response.body()));
             }
             return AdapterOutcome.success(extractContent(response.body()));
         } catch (HttpTimeoutException e) {
@@ -141,6 +142,59 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
         } catch (IOException e) {
             return responseBody;
         }
+    }
+
+    /**
+     * Monta mensagem de falha HTTP segura para UI/log: status + trecho público do corpo
+     * ({@code error}/{@code message}/{@code code}), sem repassar chaves em claro.
+     */
+    private String httpFailureMessage(int statusCode, String responseBody) {
+        String detail = extractPublicErrorDetail(responseBody);
+        return detail == null || detail.isBlank()
+                ? "HTTP " + statusCode
+                : "HTTP " + statusCode + ": " + detail;
+    }
+
+    private String extractPublicErrorDetail(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            for (String field : List.of("error", "message", "detail")) {
+                JsonNode node = root.get(field);
+                if (node == null || node.isNull()) {
+                    continue;
+                }
+                if (node.isTextual()) {
+                    return redactSecrets(node.asText());
+                }
+                if (node.isObject()) {
+                    JsonNode nestedMessage = node.get("message");
+                    if (nestedMessage != null && nestedMessage.isTextual()) {
+                        return redactSecrets(nestedMessage.asText());
+                    }
+                }
+            }
+            JsonNode code = root.get("code");
+            if (code != null && code.isTextual()) {
+                return redactSecrets(code.asText());
+            }
+        } catch (IOException ignored) {
+            // corpo não-JSON — ignora
+        }
+        return null;
+    }
+
+    /** Remove padrões típicos de API key para não ecoar credenciais em message (US5). */
+    private static String redactSecrets(String text) {
+        if (text == null) {
+            return null;
+        }
+        String redacted = text
+                .replaceAll("(?i)\\b(xai|sk|sk-proj|nvapi)-[A-Za-z0-9_\\-]{8,}", "$1-[REDACTED]")
+                .replaceAll("(?i)Bearer\\s+[A-Za-z0-9._\\-]+", "Bearer [REDACTED]");
+        return redacted.length() > 280 ? redacted.substring(0, 277) + "..." : redacted;
     }
 
     private static String trimTrailingSlash(String baseUrl) {

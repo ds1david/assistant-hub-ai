@@ -11,12 +11,14 @@ use desktop_shell::agent_control::{self, AgentStatus, ControlMode, ManagedAgentP
 use desktop_shell::ai_provider_client::{
     AiProviderClient, ConnectionTestResult, InvocationResult, Provider, SecretPreview,
 };
+use desktop_shell::assistant_prefs::{self, AssistantSessionPreferences};
 use desktop_shell::config::{self, ShellConfig};
 use desktop_shell::session_core_client::{
     channel_status_views, session_status_view, transcript_feed_entries, ChannelStatusView,
     SessionCoreClient, SessionStatusView, TranscriptFeedEntry,
 };
 use serde::Serialize;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -24,6 +26,8 @@ use tauri::{Manager, State};
 struct AppState {
     config: Mutex<ShellConfig>,
     managed_agent: Mutex<Option<ManagedAgentProcess>>,
+    /// Diretório de config do app (prefs do Assistente).
+    config_dir: PathBuf,
 }
 
 #[derive(Serialize)]
@@ -44,6 +48,47 @@ fn get_session_status(state: State<AppState>, session_id: String) -> SessionStat
     };
 
     SessionStatusResponse { status, channels }
+}
+
+#[tauri::command]
+fn create_session(
+    state: State<AppState>,
+    title: String,
+    profile_id: String,
+) -> Result<desktop_shell::session_core_client::ConversationSession, String> {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    let client = SessionCoreClient::new(base_url);
+    client
+        .create_session(&title, &profile_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_sessions(
+    state: State<AppState>,
+) -> Result<Vec<desktop_shell::session_core_client::ConversationSession>, String> {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    let client = SessionCoreClient::new(base_url);
+    client.list_sessions().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_assistant_prefs(
+    state: State<AppState>,
+    session_id: String,
+) -> AssistantSessionPreferences {
+    let path = assistant_prefs::prefs_path(&state.config_dir);
+    assistant_prefs::get_prefs(&path, &session_id)
+}
+
+#[tauri::command]
+fn set_assistant_prefs(
+    state: State<AppState>,
+    session_id: String,
+    prefs: AssistantSessionPreferences,
+) -> Result<(), String> {
+    let path = assistant_prefs::prefs_path(&state.config_dir);
+    assistant_prefs::set_prefs(&path, &session_id, prefs).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -207,15 +252,16 @@ fn invoke_ai_provider(
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            let config_path = app
+            let config_dir = app
                 .path()
                 .app_config_dir()
-                .expect("diretório de config do app")
-                .join("shell-config.json");
+                .expect("diretório de config do app");
+            let config_path = config_dir.join("shell-config.json");
             let loaded = config::load(&config_path);
             app.manage(AppState {
                 config: Mutex::new(loaded),
                 managed_agent: Mutex::new(None),
+                config_dir,
             });
             Ok(())
         })
@@ -223,11 +269,15 @@ fn main() {
         // hook de "on_window_event"/"exit" mata processos auxiliares aqui (edge case da spec).
         .invoke_handler(tauri::generate_handler![
             get_session_status,
+            create_session,
+            list_sessions,
             get_transcript_feed,
             get_agent_status,
             start_agent,
             stop_agent,
             get_shell_config,
+            get_assistant_prefs,
+            set_assistant_prefs,
             list_ai_providers,
             save_ai_provider,
             set_ai_provider_enabled,

@@ -12,7 +12,7 @@ use std::fmt;
 // Wire types (formato exato devolvido pelo session-core)
 // ---------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationSession {
     pub id: String,
     pub title: String,
@@ -110,6 +110,50 @@ impl SessionCoreClient {
                 .json::<ConversationSession>()
                 .map_err(|e| ClientError::Decode(e.to_string())),
             404 => Err(ClientError::NotFound),
+            other => Err(ClientError::Http(other.to_string())),
+        }
+    }
+
+    /// Cria sessão no session-core (necessário para o agent/transcript e o assistente automático
+    /// compartilharem o mesmo `sessionId`). Escrita deliberada — o restante do cliente permanece
+    /// consumidor de eventos/status.
+    pub fn create_session(
+        &self,
+        title: &str,
+        profile_id: &str,
+    ) -> Result<ConversationSession, ClientError> {
+        let url = format!("{}/api/sessions", self.base_url);
+        let body = serde_json::json!({
+            "title": title,
+            "profileId": profile_id,
+            "metadata": {}
+        });
+        let resp = self
+            .http
+            .post(url)
+            .json(&body)
+            .send()
+            .map_err(|e| ClientError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 | 201 => resp
+                .json::<ConversationSession>()
+                .map_err(|e| ClientError::Decode(e.to_string())),
+            other => Err(ClientError::Http(other.to_string())),
+        }
+    }
+
+    /// Lista sessões conhecidas (`GET /api/sessions`, FR-026).
+    pub fn list_sessions(&self) -> Result<Vec<ConversationSession>, ClientError> {
+        let url = format!("{}/api/sessions", self.base_url);
+        let resp = self
+            .http
+            .get(url)
+            .send()
+            .map_err(|e| ClientError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => resp
+                .json::<Vec<ConversationSession>>()
+                .map_err(|e| ClientError::Decode(e.to_string())),
             other => Err(ClientError::Http(other.to_string())),
         }
     }

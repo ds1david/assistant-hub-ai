@@ -39,6 +39,11 @@ public class SessionController {
         );
     }
 
+    @GetMapping("/sessions")
+    public List<ConversationSession> listSessions() {
+        return repository.list();
+    }
+
     @PostMapping("/sessions")
     @ResponseStatus(HttpStatus.CREATED)
     public ConversationSession create(@Valid @RequestBody CreateSessionRequest request) {

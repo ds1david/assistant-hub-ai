@@ -4,11 +4,88 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Assistant Hub AI — Shell</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 1rem;
+        line-height: 1.4;
+        background: #0f1419;
+        color: #e7ecf1;
+      }
+      #app {
+        display: grid;
+        gap: 1rem;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      section {
+        border: 1px solid #2a3540;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        background: #161d24;
+      }
+      .assistant-conflict {
+        border: 1px solid #c9a227;
+        background: #2a2410;
+        padding: 0.75rem;
+        border-radius: 6px;
+        margin: 0.5rem 0;
+      }
+      .assistant-conflict-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .assistant-question {
+        margin: 0.25rem 0;
+      }
+      .assistant-answer {
+        margin: 0.25rem 0 0.25rem 0.5rem;
+        white-space: pre-wrap;
+      }
+      .assistant-error {
+        color: #f0a0a0;
+      }
+      .assistant-busy {
+        margin-left: 0.5rem;
+        color: #8ec8ff;
+      }
+      .assistant-prefs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+      }
+      .assistant-hint {
+        color: #c9a227;
+      }
+      .session-list {
+        list-style: none;
+        padding: 0;
+        margin: 0.5rem 0 0;
+      }
+      .session-list li {
+        margin: 0.25rem 0;
+      }
+      .session-selected button {
+        font-weight: 600;
+      }
+      .session-error {
+        color: #f0a0a0;
+      }
+      button {
+        cursor: pointer;
+      }
+    </style>
   </head>
   <body>
     <main id="app">
+      <section id="session-picker" aria-label="Lista e seleção de sessão"></section>
       <section id="session-status" aria-label="Status da sessão e canais"></section>
       <section id="transcript-feed" aria-label="Feed de transcript"></section>
+      <section id="assistant-panel" aria-label="Assistente automático"></section>
       <section id="agent-panel" aria-label="Agent Windows"></section>
       <section id="ai-provider-panel" aria-label="Provedores de IA"></section>
     </main>

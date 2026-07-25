@@ -155,12 +155,14 @@ function renderSecretPreview(preview: SecretPreview): string {
 
 function renderTestResult(result: ConnectionTestResult): string {
   if (result.success) {
-    return `<p class="ai-provider-test-result" data-testid="ai-provider-test-result" data-success="true">Conexão OK</p>`;
+    const detail = result.message ? ` (${escapeHtml(result.message)})` : "";
+    return `<p class="ai-provider-test-result" data-testid="ai-provider-test-result" data-success="true">Conexão OK${detail}</p>`;
   }
   const label = result.errorType ? ERROR_TYPE_LABELS[result.errorType] : "erro desconhecido";
+  const detail = result.message ? ` — ${escapeHtml(result.message)}` : "";
   return `
     <p class="ai-provider-test-result" data-testid="ai-provider-test-result" data-success="false" data-error-type="${result.errorType ?? ""}">
-      Falha: ${escapeHtml(label)}
+      Falha: ${escapeHtml(label)}${detail}
     </p>
   `;
 }

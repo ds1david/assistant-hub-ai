@@ -38,6 +38,16 @@ public class SessionRepository {
         return Optional.ofNullable(sessions.get(id));
     }
 
+    /**
+     * Lista sessões conhecidas no cache (rehidratado do Memory Hub na subida).
+     * Ordenação: {@code createdAt} descendente (mais recente primeiro).
+     */
+    public List<ConversationSession> list() {
+        return sessions.values().stream()
+                .sorted((a, b) -> b.createdAt().compareTo(a.createdAt()))
+                .toList();
+    }
+
     public void append(HubEvent event) {
         events.computeIfAbsent(event.sessionId(), ignored -> new ArrayList<>()).add(event);
         persistenceStore.appendEvent(event);
