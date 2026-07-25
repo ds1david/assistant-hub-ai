@@ -52,7 +52,7 @@ def create_app(
         similarity_threshold=settings.echo_suppression_similarity,
         min_chars=settings.echo_suppression_min_chars,
     )
-    app = FastAPI(title="Assistant Hub AI Transcription Service", version="0.1.8")
+    app = FastAPI(title="Assistant Hub AI Transcription Service", version="0.2.0")
 
     @app.get("/")
     async def dashboard() -> FileResponse:

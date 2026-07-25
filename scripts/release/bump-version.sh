@@ -67,6 +67,27 @@ else:
 PY
 fi
 
+# Agent CLI __version__ (fonte usada por --version / check-version.sh)
+if [[ -f agents/windows-audio-agent/src/assistant_hub_audio/__init__.py ]]; then
+  python3 - <<PY
+from pathlib import Path
+import re
+path = Path("agents/windows-audio-agent/src/assistant_hub_audio/__init__.py")
+text = path.read_text(encoding="utf-8")
+new_text, n = re.subn(
+    r'(?m)^(__version__\s*=\s*)["\'][^"\']+["\']',
+    r'\1"${NEW}"',
+    text,
+    count=1,
+)
+if n == 0:
+    print("AVISO: __version__ não encontrado em assistant_hub_audio/__init__.py")
+else:
+    path.write_text(new_text, encoding="utf-8")
+    print("windows-audio-agent __init__.__version__ atualizado")
+PY
+fi
+
 if [[ -f .github/workflows/ci.yml ]]; then
   # Atualiza assert literal se existir
   sed -i -E "s/(app\.version == ['\"])[^'\"]+(['\"])/\1${NEW}\2/" .github/workflows/ci.yml || true

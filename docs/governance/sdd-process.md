@@ -50,7 +50,12 @@ Umbrellas existentes (`001`, `002`, `003`) **não** são renumeradas. Features n
 
 - Fonte: `VERSION` na raiz
 - Check: `./scripts/release/check-version.sh`
-- Bump local: `./scripts/release/bump-version.sh <semver>`
+- Bump local: `./scripts/release/bump-version.sh <semver>` (propaga README, FastAPI, agent pyproject + `__version__`, assert CI)
+- Changelog: `CHANGELOG.md` na raiz
+- Checklist de release (template): `docs/release/checklist-template.md`
+- Checklist preenchido por versão: `docs/release/checklist-<versão>.md`
+- Fluxo mínimo (outro dev): `docs/release/min-flow.md` (link no README)
+- Tag: somente no commit já em `main`, após CI verde e checklist **Ready for tag = YES** (gate humano; constituição P8). Prefixo `v` + SemVer (ex. `v0.2.0`).
 
 ## Definition of Done
 

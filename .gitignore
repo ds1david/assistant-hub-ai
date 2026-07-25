@@ -32,8 +32,13 @@ htmlcov/
 *.egg-info/
 
 # Memory Hub — dado de sessão persistido localmente (P9, nunca commitado)
+# Default path is data/session-core/ (CWD repo root); also cover module CWD.
 data/session-core/*.db
 data/session-core/*.db-*
+services/session-core/data/*.db
+services/session-core/data/*.db-*
+**/memory-hub.db
+**/memory-hub.db-*
 
 # Desktop shell (apps/desktop-shell) — frontend Node/Vite
 node_modules/

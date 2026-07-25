@@ -19,7 +19,7 @@ Workspace esperado:
 /home/david/workspace/assistant-hub-ai
 ```
 
-## Versão 0.1.8
+## Versão 0.2.0
 
 Esta versão mantém o WSL como ponto único de inicialização e adiciona o planejamento formal de duas capacidades futuras:
 
@@ -214,6 +214,26 @@ Validação no PowerShell Windows:
 ```powershell
 assistant-hub-audio probe --profile "\\wsl.localhost\Ubuntu-24.04\home\david\workspace\assistant-hub-ai\samples\audio-profiles\default.yaml"
 ```
+
+## Fluxo mínimo (release)
+
+Para deixar o produto **no ar** de ponta a ponta (aceite de release pós R1–R6), os **três pilares** são obrigatórios — não um subconjunto:
+
+1. **WSL** — Docker STT + `session-core` saudáveis
+2. **Agent Windows** — captura WASAPI conectada ao STT
+3. **Desktop shell** — UI local refletindo sessão/agent
+
+Guia passo a passo, critérios de verificação e falhas comuns (WSL vs Windows):
+
+- **[docs/release/min-flow.md](docs/release/min-flow.md)**
+
+Release / tag:
+
+- Checklist: [docs/release/checklist-template.md](docs/release/checklist-template.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Processo: [docs/governance/sdd-process.md](docs/governance/sdd-process.md) (versionamento + release)
+
+Sem host Windows, GPU ou WebView2: registre o **bloqueio de ambiente**; não declare o fluxo mínimo completo como OK.
 
 ## Features futuras aprovadas
 
