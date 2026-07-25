@@ -55,7 +55,7 @@ export function renderAgentPanel(
         </p>`
       : "";
 
-  let actionHtml = "";
+  let actionHtml: string;
   const canStart =
     !status.running &&
     status.controlMode === "Direct" &&

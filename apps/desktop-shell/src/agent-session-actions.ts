@@ -32,12 +32,12 @@ export async function restartAgentWithActiveSession(
 
 /**
  * Seleção de sessão na lista (FR-009 / FR-011(f)): atualiza só o id ativo de UI.
- * MUST NOT chamar stop/start/restart no agent.
+ * MUST NOT chamar stop/start/restart no agent — a assinatura não recebe AgentProcessActions
+ * de propósito, para que a troca de sessão não possa reiniciar o processo.
  */
 export function onSessionSelected(
   nextSessionId: string,
   setActiveSessionId: (id: string) => void,
-  _agentActions: AgentProcessActions,
 ): void {
   setActiveSessionId(nextSessionId);
 }

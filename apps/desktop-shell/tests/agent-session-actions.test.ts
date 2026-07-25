@@ -38,13 +38,10 @@ describe("restartAgentWithActiveSession (I2 / FR-011g)", () => {
 });
 
 describe("onSessionSelected (I3 / FR-009)", () => {
-  it("does not call stop or start when selecting another session", () => {
-    const start = vi.fn();
-    const stop = vi.fn();
+  it("updates only the active session id (no agent process API in signature)", () => {
     const setActive = vi.fn();
-    onSessionSelected("new-sess", setActive, { start, stop });
+    onSessionSelected("new-sess", setActive);
     expect(setActive).toHaveBeenCalledWith("new-sess");
-    expect(start).not.toHaveBeenCalled();
-    expect(stop).not.toHaveBeenCalled();
+    expect(setActive).toHaveBeenCalledOnce();
   });
 });

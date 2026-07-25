@@ -234,7 +234,7 @@ export async function selectSession(sessionId: string): Promise<void> {
   // FR-009: troca de sessão NÃO reinicia o agent (onSessionSelected não chama stop/start).
   onSessionSelected(sessionId, (id) => {
     activeSessionId = id;
-  }, agentProcessActions);
+  });
   transcriptPrimed = false;
   lastTranscriptFeed = [];
   assistantController.resetSessionState();
