@@ -37,9 +37,8 @@ cd src-tauri
 cargo test
 cd ..
 
-# 4. (Opcional, só na primeira vez) Gerar ícones a partir de uma imagem-fonte —
-#    tauri.conf.json não traz ícones versionados; sem eles o bundle usa um ícone
-#    genérico do Tauri.
+# 4. Ícones: placeholders versionados em src-tauri/icons/ (inclui icon.ico exigido
+#    pelo tauri-build no Windows). Para branding real, gere a partir de uma fonte:
 # cargo tauri icon caminho/para/icone-fonte.png
 
 # 5. Build de desenvolvimento (abre a janela do shell apontando para o Vite dev server).
