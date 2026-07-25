@@ -51,29 +51,29 @@ chmod +x scripts/bootstrap-wsl-ubuntu.sh scripts/wsl/*.sh
 # ou suba serviços pontualmente via scripts/wsl/compose.sh
 ```
 
-`session-core` já entra no hub. Standalone (debug / `--no-session-core`):
+`session-core` sobe como container Compose (`assistant-hub-session-core`) junto com o STT. Standalone:
 
 ```bash
-# Preferido: falha cedo se :8080 já estiver ocupada por outro app (ex.: number-generator)
-./scripts/wsl/start-session-core.sh
-./scripts/wsl/start-session-core.sh --seed-example --background
+# Container só do core (STT já no ar)
+./scripts/wsl/compose.sh up -d session-core
 ./scripts/wsl/stop-session-core.sh
 
-# equivalente manual (CWD = raiz do monorepo — importa para data/session-core/)
-mvn -pl services/session-core -am spring-boot:run
+# Debug JVM (CWD = raiz do monorepo — importa para data/session-core/)
+./scripts/wsl/start-session-core.sh --seed-example
+# ou: mvn -pl services/session-core -am spring-boot:run
 ```
 
-Porta padrão típica do `session-core`: `http://localhost:8080` (confirme em `services/session-core` / config). Se a 8080 estiver tomada, use `--session-core-port 8081` no hub (ou `--port 8081` no standalone) e ajuste `sessionCoreBaseUrl` no shell desktop.
+Porta padrão: `http://localhost:8080` (`SESSION_CORE_PORT` / `--session-core-port`). Se a 8080 estiver tomada, use `8081` e ajuste `sessionCoreBaseUrl` no shell desktop.
 
 ### Critério “no ar”
 
 | Check | Esperado |
 |-------|----------|
 | Compose / STT | Container de transcrição healthy ou endpoint WS documentado responde |
-| `session-core` | `GET http://localhost:8080/actuator/health` (ou URL documentada) → `UP` |
+| `session-core` | Container `assistant-hub-session-core` + `GET http://localhost:8080/actuator/health` → `UP` |
 | `.env` | Presente na raiz; **não** commitado |
 
-Falhas comuns: Docker não no PATH do WSL; `.env` ausente; GPU/`nvidia-smi` indisponível; CWD errado gerando `memory-hub.db` em path inesperado (arquivo local é **gitignored**).
+Falhas comuns: Docker não no PATH do WSL; `.env` ausente; GPU/`nvidia-smi` indisponível; build Maven da imagem session-core lento na 1ª vez; CWD/volumes gerando `memory-hub.db` em path inesperado (arquivo local é **gitignored**).
 
 Scripts: `scripts/wsl/compose.sh`, `scripts/wsl/start-assistant-hub.sh`, `scripts/wsl/init-env.sh`.
 

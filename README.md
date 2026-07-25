@@ -28,7 +28,7 @@ Esta versão mantém o WSL como ponto único de inicialização e adiciona o pla
 
 O runtime atual continua igual:
 
-- `scripts/wsl/start-assistant-hub.sh` sobe containers, session-core (background), aquece o Whisper e abre o agente Windows.
+- `scripts/wsl/start-assistant-hub.sh` sobe containers (STT + session-core), aquece o Whisper e abre o agente Windows.
 - `scripts/wsl/compose.sh` sempre usa `--env-file <raiz>/.env` e `--project-directory <raiz>`.
 - `.env` é criado automaticamente a partir de `.env.example` com permissão `600`.
 - A configuração é validada por `docker compose config --quiet` antes do build.
@@ -120,7 +120,7 @@ Resumo após reiniciar o Windows:
 
 1. Abrir o **Docker Desktop**.
 2. WSL: `./scripts/wsl/start-assistant-hub.sh --no-build`  
-   (sobe STT, session-core em background com seed se necessário, agent Windows e dashboard)
+   (sobe STT + session-core via Compose com seed se necessário, agent Windows e dashboard)
 3. Agent Windows (se não abriu sozinho): `scripts/windows/run-audio-agent-foreground.ps1` com `-Session` / `-Profile`
 4. Shell desktop (opcional): em `C:\src\...\apps\desktop-shell` → `cargo tauri dev --features gui`
 
@@ -141,7 +141,7 @@ Esse comando:
 4. executa o Compose em background;
 5. aguarda o health check;
 6. carrega o modelo Whisper;
-7. sobe o **session-core** em background (`--seed-example` se faltar `config/ai-providers.yaml`);
+7. sobe o **session-core** como container Compose (seed de `config/ai-providers.yaml` se faltar);
 8. abre um novo PowerShell do Windows;
 9. inicia o agente WASAPI em foreground nesse PowerShell;
 10. abre o dashboard.
@@ -186,6 +186,7 @@ Use o wrapper para garantir o carregamento correto do `.env`:
 ```bash
 ./scripts/wsl/compose.sh ps
 ./scripts/wsl/compose.sh logs -f transcription
+./scripts/wsl/compose.sh logs -f session-core
 ./scripts/wsl/compose.sh config
 ./scripts/wsl/compose.sh down
 ```
@@ -194,15 +195,22 @@ Evite chamar diretamente `docker compose -f infra/compose/...`, pois nesse forma
 
 ## session-core (Memory Hub + AI Provider Hub)
 
-Incluído por padrão em `start-assistant-hub.sh` (background). O shell desktop e o hub de provedores usam `http://localhost:8080`.
+Incluído por padrão em `start-assistant-hub.sh` como container Docker (`assistant-hub-session-core`). O shell desktop e o hub de provedores usam `http://localhost:8080`.
 
-Standalone (foreground, debug, ou se usou `--no-session-core`) — CWD = **raiz do monorepo**:
+Dentro do Compose o feed de transcrição é `ws://transcription:8001/ws/transcripts`. Volumes: `./data/session-core` e `./config` (provedores + hotwords).
+
+```bash
+./scripts/wsl/compose.sh up -d session-core
+./scripts/wsl/compose.sh logs -f session-core
+./scripts/wsl/stop-session-core.sh
+```
+
+Debug JVM (foreground; CWD = **raiz do monorepo**), se usou `--no-session-core` no hub:
 
 ```bash
 ./scripts/wsl/start-session-core.sh
 # se :8080 estiver com outro app (ex.: number-generator), o script aborta com pid/cmd
 ./scripts/wsl/start-session-core.sh --seed-example --background
-./scripts/wsl/stop-session-core.sh
 ```
 
 Health: `http://localhost:8080/actuator/health` · API: `http://localhost:8080/api/ai-providers`
@@ -252,7 +260,7 @@ assistant-hub-audio probe --profile "\\wsl.localhost\Ubuntu-24.04\home\david\wor
 
 Para deixar o produto **no ar** de ponta a ponta (aceite de release pós R1–R6), os **três pilares** são obrigatórios — não um subconjunto:
 
-1. **WSL** — Docker STT + `session-core` saudáveis
+1. **WSL** — Docker STT + Docker `session-core` saudáveis
 2. **Agent Windows** — captura WASAPI conectada ao STT
 3. **Desktop shell** — UI local refletindo sessão/agent
 

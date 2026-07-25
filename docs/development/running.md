@@ -12,13 +12,13 @@ Complementa o [fluxo mínimo de release](../release/min-flow.md) e o ambiente [W
 | # | Componente | Onde | Porta / sinal | Script principal |
 |---|------------|------|---------------|------------------|
 | 1 | Transcrição (Whisper) | WSL + Docker | `http://localhost:8001` | `scripts/wsl/start-assistant-hub.sh` |
-| 2 | session-core (sessões + AI providers) | WSL + Java | `http://localhost:8080` | incluso no hub (bg); standalone: `start-session-core.sh` |
+| 2 | session-core (sessões + AI providers) | WSL + Docker | `http://localhost:8080` | incluso no hub (Compose); debug JVM: `start-session-core.sh` |
 | 3 | Agent WASAPI | Windows nativo | WebSocket → `:8001` | `scripts/windows/run-audio-agent-foreground.ps1` |
 | 4 | Desktop shell (opcional) | Windows nativo | UI Tauri | `cargo tauri dev --features gui` em `apps/desktop-shell` |
 
 Ordem recomendada após reboot: **Docker Desktop → `start-assistant-hub.sh` (STT + session-core + agent) → shell (opcional)**.
 
-O dashboard de STT no browser (`:8001`) **não** substitui o session-core. Salvar provedores de IA no shell **exige** o session-core em `:8080` (ou URL configurada). O hub sobe o session-core em background por padrão (`--no-session-core` para pular).
+O dashboard de STT no browser (`:8001`) **não** substitui o session-core. Salvar provedores de IA no shell **exige** o session-core em `:8080` (ou URL configurada). O hub sobe o **container** `assistant-hub-session-core` por padrão (`--no-session-core` para pular).
 
 ---
 
@@ -45,8 +45,8 @@ cd /home/david/workspace/assistant-hub-ai
 
 Isso sobe, nesta ordem:
 
-1. containers de transcrição (Compose);
-2. **session-core** em background (`--seed-example` se `config/ai-providers.yaml` não existir);
+1. containers **transcription** + **session-core** (Compose; seed de `config/ai-providers.yaml` se ausente);
+2. health de STT (`:8001`) e session-core (`:8080`);
 3. agent WASAPI em um **PowerShell do Windows** (salvo `--no-agent`);
 4. browser no dashboard `http://localhost:8001` (salvo `--no-browser`).
 
@@ -73,7 +73,17 @@ curl -sS http://127.0.0.1:8080/api/ai-providers
 
 ### 2. session-core standalone (opcional)
 
-Use só se subiu o hub com `--no-session-core`, ou para debug em foreground:
+**Docker (alinhado ao hub):**
+
+```bash
+./scripts/wsl/compose.sh up -d session-core
+./scripts/wsl/compose.sh logs -f session-core
+./scripts/wsl/stop-session-core.sh
+```
+
+Dentro do container o feed de STT é `ws://transcription:8001/ws/transcripts` (DNS Compose). Volumes: `data/session-core` → SQLite; `config/` → `ai-providers.yaml`. Provedores no host (ex. Ollama): `baseUrl` com `http://host.docker.internal:11434/v1` — não use `127.0.0.1` a partir do container.
+
+**JVM (debug / hot reload Maven)** — use com hub em `--no-session-core` ou STT já no ar:
 
 ```bash
 cd /home/david/workspace/assistant-hub-ai
@@ -82,8 +92,9 @@ cd /home/david/workspace/assistant-hub-ai
 ```
 
 - **CWD deve ser a raiz do monorepo** (`data/session-core/`, `config/ai-providers.yaml` são relativos).
+- No host, o feed padrão é `ws://localhost:8001/ws/transcripts`.
 - Se a porta **8080** estiver ocupada por **outro** app (ex.: `number-generator`), o script **aborta** e mostra `pid` / `main` / trecho do `cmd`.
-- Outra porta: `--port 8081` e aponte o shell (`sessionCoreBaseUrl`).
+- Outra porta: `--port 8081` (JVM) ou `SESSION_CORE_PORT=8081` / `--session-core-port 8081` (Compose) e aponte o shell (`sessionCoreBaseUrl`).
 
 ### 3. Agent Windows (se não abriu no passo 1)
 
@@ -147,7 +158,7 @@ cd /home/david/workspace/assistant-hub-ai
 ```
 
 - Browser STT: http://localhost:8001  
-- session-core: http://localhost:8080 (background; `./scripts/wsl/stop-session-core.sh` para parar)  
+- session-core: http://localhost:8080 (container; `./scripts/wsl/stop-session-core.sh` ou `compose.sh stop session-core`)  
 - Shell (opcional): `cargo tauri dev --features gui` em `C:\src\...\apps\desktop-shell`
 
 Alternativa a partir do PowerShell Windows (sobe Compose + agent):

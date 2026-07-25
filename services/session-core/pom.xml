@@ -31,6 +31,10 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
@@ -47,6 +51,8 @@
   </dependencies>
 
   <build>
+    <!-- Nome fixo para COPY no Dockerfile (evita acoplar à versão SNAPSHOT). -->
+    <finalName>session-core</finalName>
     <resources>
       <resource>
         <directory>src/main/resources</directory>
@@ -77,6 +83,14 @@
           -->
           <workingDirectory>${maven.multiModuleProjectDirectory}</workingDirectory>
         </configuration>
+        <!-- Sem spring-boot-starter-parent o repackage não vem ligado ao package. -->
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

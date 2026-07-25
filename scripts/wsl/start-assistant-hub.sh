@@ -24,13 +24,14 @@ Uso: ./scripts/wsl/start-assistant-hub.sh [opções]
   --reinstall-agent      reinstala o agente Python do Windows
   --no-agent             sobe apenas os containers (e session-core, se habilitado)
   --no-browser           não abre o dashboard
-  --no-session-core      não sobe o session-core (Java :8080)
-  --session-core-port N  porta do session-core (default: 8080 ou $SERVER_PORT)
+  --no-session-core      não sobe o session-core (container Compose :8080)
+  --session-core-port N  porta host do session-core (default: 8080 ou $SERVER_PORT)
   --no-seed-example      não copia samples/ai-providers se config estiver ausente
   -h, --help             mostra esta ajuda
 
-Por padrão sobe STT (Docker), session-core em background (--seed-example),
+Por padrão sobe STT + session-core (Docker Compose), aquece o Whisper,
 abre o agent WASAPI no Windows e o dashboard em :8001.
+Debug JVM do session-core: ./scripts/wsl/start-session-core.sh (com --no-session-core no hub).
 USAGE
 }
 
@@ -57,17 +58,16 @@ if [[ ! -f "$PROFILE_LINUX" ]]; then
   exit 1
 fi
 
-"$REPO_ROOT/scripts/wsl/rebuild-and-start.sh" "${BUILD_ARGS[@]}"
-
-if [[ "$START_SESSION_CORE" == true ]]; then
-  SESSION_CORE_ARGS=(--background --port "$SESSION_CORE_PORT")
-  if [[ "$SEED_SESSION_CORE" == true ]]; then
-    SESSION_CORE_ARGS+=(--seed-example)
-  fi
-  echo "==> session-core (background)"
-  # Propaga falha de porta ocupada / health timeout — o script filho já imprime diagnóstico.
-  "$REPO_ROOT/scripts/wsl/start-session-core.sh" "${SESSION_CORE_ARGS[@]}"
+REBUILD_ARGS=("${BUILD_ARGS[@]}")
+REBUILD_ARGS+=(--session-core-port "$SESSION_CORE_PORT")
+if [[ "$START_SESSION_CORE" != true ]]; then
+  REBUILD_ARGS+=(--no-session-core)
 fi
+if [[ "$SEED_SESSION_CORE" != true ]]; then
+  REBUILD_ARGS+=(--no-seed-example)
+fi
+
+"$REPO_ROOT/scripts/wsl/rebuild-and-start.sh" "${REBUILD_ARGS[@]}"
 
 ps_quote() {
   local value="$1"
@@ -107,6 +107,7 @@ echo "Session: $SESSION"
 echo "Profile: $PROFILE_RELATIVE"
 echo "Dashboard: http://localhost:8001"
 if [[ "$START_SESSION_CORE" == true ]]; then
-  echo "session-core: http://127.0.0.1:${SESSION_CORE_PORT}"
+  echo "session-core (Docker): http://127.0.0.1:${SESSION_CORE_PORT}"
+  echo "  logs: ./scripts/wsl/compose.sh logs -f session-core"
   echo "  stop: ./scripts/wsl/stop-session-core.sh"
 fi

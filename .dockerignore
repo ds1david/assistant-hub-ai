@@ -1,0 +1,56 @@
+# Build context for session-core (and any monorepo-root Dockerfile).
+.git
+.github
+**/.git
+
+# Heavy / irrelevant trees
+agents
+apps
+docs
+specs
+samples
+scripts
+infra
+.specify
+.claude
+.grok
+.vscode
+.idea
+
+# Python / Node / native build outputs
+**/node_modules
+**/__pycache__
+**/.venv
+**/.venv-*
+**/*.egg-info
+**/dist
+**/target
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/htmlcov
+**/.coverage
+
+# Local runtime state and secrets (mounted at run, not baked into image)
+.env
+.env.*
+data
+config/ai-providers.yaml
+config/ai-providers.local.yaml
+*.secrets.yaml
+**/*.db
+**/*.db-*
+**/*.wav
+recordings
+
+# Transcription image has its own context; exclude from monorepo builds
+services/transcription-service
+
+# Misc
+**/.DS_Store
+**/*.log
+CHANGELOG.md
+VERSION
+README.md
+CLAUDE.md
+AGENTS.md

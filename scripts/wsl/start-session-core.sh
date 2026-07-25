@@ -14,6 +14,10 @@ usage() {
   cat <<'USAGE'
 Uso: ./scripts/wsl/start-session-core.sh [opções]
 
+  Modo debug: sobe o session-core via Maven (JVM no host WSL).
+  Uso normal: o hub sobe o container Compose (./scripts/wsl/start-assistant-hub.sh).
+  Só container: ./scripts/wsl/compose.sh up -d session-core
+
   --port N             porta HTTP (default: 8080 ou $SERVER_PORT)
   --seed-example       se config/ai-providers.yaml não existir, copia o sample
   --background         sobe em background e aguarda /actuator/health = UP
@@ -22,6 +26,7 @@ Uso: ./scripts/wsl/start-session-core.sh [opções]
   -h, --help           mostra esta ajuda
 
 CWD de execução: sempre a raiz do monorepo (data/session-core e config/ relativos).
+No JVM, o feed padrão é ws://localhost:8001/ws/transcripts (STT no host/Compose).
 
 Exemplos:
   ./scripts/wsl/start-session-core.sh
@@ -96,6 +101,17 @@ is_assistant_hub_session_core() {
   providers="$(curl -fsS --max-time 2 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/api/ai-providers" 2>/dev/null || true)"
   [[ "$health" == *'"status":"UP"'* || "$health" == *'"status" : "UP"'* ]] && [[ "$providers" == "200" ]]
 }
+
+# Se o container Compose já cobre a porta, não sobe um segundo JVM.
+if docker container inspect assistant-hub-session-core >/dev/null 2>&1; then
+  state="$(docker inspect -f '{{.State.Running}}' assistant-hub-session-core 2>/dev/null || echo false)"
+  if [[ "$state" == "true" ]] && is_assistant_hub_session_core; then
+    echo "session-core já está no ar via Docker (assistant-hub-session-core)"
+    echo "  http://127.0.0.1:${PORT}"
+    echo "  logs: ./scripts/wsl/compose.sh logs -f session-core"
+    exit 0
+  fi
+fi
 
 if port_is_listening; then
   if is_assistant_hub_session_core; then

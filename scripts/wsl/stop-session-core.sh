@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Encerra o session-core iniciado por start-session-core.sh --background (ou o Java
-# na porta padrão se for claramente o Assistant Hub).
+# Encerra o session-core: container Compose e/ou JVM iniciado por start-session-core.sh.
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COMPOSE="$REPO_ROOT/scripts/wsl/compose.sh"
 PORT="${SERVER_PORT:-8080}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/assistant-hub-ai"
 PID_FILE="$STATE_DIR/session-core.pid"
@@ -12,9 +12,10 @@ usage() {
   cat <<'USAGE'
 Uso: ./scripts/wsl/stop-session-core.sh [--port N]
 
-  Encerra o launcher gravado em $XDG_STATE_HOME/assistant-hub-ai/session-core.pid
-  e, se ainda houver listener na porta que responde /api/ai-providers, tenta
-  encerrar o processo Java correspondente.
+  1) Para o serviço Compose session-core (se existir)
+  2) Encerra o launcher JVM em $XDG_STATE_HOME/assistant-hub-ai/session-core.pid
+  3) Se ainda houver listener na porta que responde /api/ai-providers, tenta
+     encerrar o processo Java correspondente
 USAGE
 }
 
@@ -42,6 +43,18 @@ stop_pid() {
   fi
 }
 
+# Preferência: container Compose (modo padrão do hub).
+if command -v docker >/dev/null 2>&1; then
+  if docker container inspect assistant-hub-session-core >/dev/null 2>&1; then
+    echo "Parando container assistant-hub-session-core..."
+    if [[ -x "$COMPOSE" ]]; then
+      "$COMPOSE" stop session-core >/dev/null 2>&1 || docker stop assistant-hub-session-core >/dev/null 2>&1 || true
+    else
+      docker stop assistant-hub-session-core >/dev/null 2>&1 || true
+    fi
+  fi
+fi
+
 if [[ -f "$PID_FILE" ]]; then
   stop_pid "$(cat "$PID_FILE" 2>/dev/null || true)"
   rm -f "$PID_FILE"
@@ -54,9 +67,14 @@ if command -v ss >/dev/null 2>&1; then
     pid="${BASH_REMATCH[1]}"
     cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
     if [[ "$cmd" == *assistanthub* || "$cmd" == *session-core* || "$cmd" == *"$REPO_ROOT"* ]]; then
-      # Pode ser o processo-filho Maven/Spring; encerra a árvore a partir do pid do listener.
       stop_pid "$pid"
     else
+      # Pode ser o proxy do Docker na porta mapeada — se o container já parou, ok.
+      if docker container inspect assistant-hub-session-core >/dev/null 2>&1 \
+        && [[ "$(docker inspect -f '{{.State.Running}}' assistant-hub-session-core 2>/dev/null || echo false)" == "true" ]]; then
+        echo "Porta ${PORT} ainda mapeada pelo container session-core em execução." >&2
+        exit 1
+      fi
       echo "Porta ${PORT} ainda em uso por outro processo (não interrompido):" >&2
       echo "  pid=$pid" >&2
       echo "  cmd=$cmd" >&2

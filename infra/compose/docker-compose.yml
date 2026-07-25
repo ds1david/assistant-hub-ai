@@ -40,5 +40,37 @@ services:
       - ./config:/config:ro
     restart: unless-stopped
 
+  session-core:
+    build:
+      context: .
+      dockerfile: services/session-core/Dockerfile
+    container_name: assistant-hub-session-core
+    ports:
+      - "${SESSION_CORE_PORT:-8080}:8080"
+    environment:
+      SERVER_PORT: "8080"
+      # Nome do serviço Compose — localhost não resolve entre containers.
+      SESSION_CORE_TRANSCRIPT_FEED_URL: ${SESSION_CORE_TRANSCRIPT_FEED_URL:-ws://transcription:8001/ws/transcripts}
+      SESSION_CORE_MEMORY_HUB_PATH: ${SESSION_CORE_MEMORY_HUB_PATH:-/data/session-core/memory-hub.db}
+      SESSION_CORE_AI_PROVIDER_HUB_PATH: ${SESSION_CORE_AI_PROVIDER_HUB_PATH:-/config/ai-providers.yaml}
+      # secretRef env:VAR — chaves opcionais propagadas do .env do host.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ./data/session-core:/data/session-core
+      # rw: shell/API grava config/ai-providers.yaml (transcription monta o mesmo dir :ro).
+      - ./config:/config
+    # Ollama/NIM local no host WSL: use baseUrl http://host.docker.internal:11434/v1
+    # (127.0.0.1 dentro do container é o próprio container, não o host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - transcription
+    restart: unless-stopped
+
 volumes:
   whisper-models:

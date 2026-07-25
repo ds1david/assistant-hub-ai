@@ -1,10 +1,47 @@
 version: 1
 
 providers:
+  - id: openai-gpt
+    label: OpenAI GPT
+    type: openai-compatible
+    enabled: true
+    baseUrl: https://api.openai.com/v1
+    authentication:
+      mode: bearer
+      # Defina OPENAI_API_KEY no .env (gitignored); nunca coloque a chave neste YAML.
+      secretRef: env:OPENAI_API_KEY
+    defaults:
+      model: gpt-4o-mini
+      temperature: 0.2
+      maxTokens: 2048
+      timeoutMs: 45000
+    capabilities:
+      - chat
+      - streaming
+
+  - id: xai-grok
+    label: xAI Grok
+    type: openai-compatible
+    enabled: true
+    baseUrl: https://api.x.ai/v1
+    authentication:
+      mode: bearer
+      # Defina XAI_API_KEY no .env (gitignored); nunca coloque a chave neste YAML.
+      secretRef: env:XAI_API_KEY
+    defaults:
+      model: grok-3-mini
+      temperature: 0.2
+      maxTokens: 2048
+      timeoutMs: 45000
+    capabilities:
+      - chat
+      - streaming
+
   - id: ollama-local
     label: Ollama local
     type: openai-compatible
     enabled: true
+    # No host JVM use 127.0.0.1; no container Compose use host.docker.internal.
     baseUrl: http://127.0.0.1:11434/v1
     authentication:
       mode: none
@@ -54,12 +91,14 @@ providers:
 
 routes:
   live-answer:
-    primary: nvidia-hosted
+    primary: openai-gpt
     fallbacks:
+      - xai-grok
       - ollama-local
   final-summary:
-    primary: custom-openai-compatible
+    primary: openai-gpt
     fallbacks:
-      - nvidia-hosted
+      - xai-grok
+      - ollama-local
   embeddings:
     primary: ollama-local
