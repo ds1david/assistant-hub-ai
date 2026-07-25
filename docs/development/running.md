@@ -12,13 +12,13 @@ Complementa o [fluxo mínimo de release](../release/min-flow.md) e o ambiente [W
 | # | Componente | Onde | Porta / sinal | Script principal |
 |---|------------|------|---------------|------------------|
 | 1 | Transcrição (Whisper) | WSL + Docker | `http://localhost:8001` | `scripts/wsl/start-assistant-hub.sh` |
-| 2 | session-core (sessões + AI providers) | WSL + Java | `http://localhost:8080` | `scripts/wsl/start-session-core.sh` |
+| 2 | session-core (sessões + AI providers) | WSL + Java | `http://localhost:8080` | incluso no hub (bg); standalone: `start-session-core.sh` |
 | 3 | Agent WASAPI | Windows nativo | WebSocket → `:8001` | `scripts/windows/run-audio-agent-foreground.ps1` |
 | 4 | Desktop shell (opcional) | Windows nativo | UI Tauri | `cargo tauri dev --features gui` em `apps/desktop-shell` |
 
-Ordem recomendada após reboot: **Docker Desktop → (1) STT → (2) session-core → (3) agent → (4) shell**.
+Ordem recomendada após reboot: **Docker Desktop → `start-assistant-hub.sh` (STT + session-core + agent) → shell (opcional)**.
 
-O dashboard de STT no browser (`:8001`) **não** substitui o session-core. Salvar provedores de IA no shell **exige** o session-core em `:8080` (ou URL configurada).
+O dashboard de STT no browser (`:8001`) **não** substitui o session-core. Salvar provedores de IA no shell **exige** o session-core em `:8080` (ou URL configurada). O hub sobe o session-core em background por padrão (`--no-session-core` para pular).
 
 ---
 
@@ -36,50 +36,54 @@ Não capture WASAPI de dentro do WSL. Não compartilhe venv Python entre Windows
 
 ## Fluxo completo pós-reboot
 
-### 1. Transcrição (WSL)
+### 1. Stack principal (WSL) — STT + session-core + agent
 
 ```bash
 cd /home/david/workspace/assistant-hub-ai
 ./scripts/wsl/start-assistant-hub.sh --no-build
 ```
 
+Isso sobe, nesta ordem:
+
+1. containers de transcrição (Compose);
+2. **session-core** em background (`--seed-example` se `config/ai-providers.yaml` não existir);
+3. agent WASAPI em um **PowerShell do Windows** (salvo `--no-agent`);
+4. browser no dashboard `http://localhost:8001` (salvo `--no-browser`).
+
 | Situação | Comando / flag |
 |----------|----------------|
 | Dia a dia (imagens já buildadas) | `--no-build` |
 | Rebuild + reinstalar agent | `--reinstall-agent` (sem `--no-build` se precisar recompilar) |
 | Só containers, agent manual | `--no-agent` |
+| Sem session-core (só STT/agent) | `--no-session-core` |
+| Outra porta do session-core | `--session-core-port 8081` |
+| Sem copiar sample de provedores | `--no-seed-example` |
 | Outro perfil de áudio | `--profile samples/audio-profiles/<arquivo>.yaml` |
-
-O start padrão pode abrir um **PowerShell do Windows** com o agent e o browser em `http://localhost:8001`.
 
 **Verificação:**
 
 ```bash
 curl -sS http://127.0.0.1:8001/health
 ./scripts/wsl/compose.sh ps
+curl -sS http://127.0.0.1:8080/actuator/health
+# esperado: status UP
+curl -sS http://127.0.0.1:8080/api/ai-providers
+# esperado: [] ou lista JSON — NÃO "Erro interno inesperado"
 ```
 
-### 2. session-core (WSL, outro terminal)
+### 2. session-core standalone (opcional)
+
+Use só se subiu o hub com `--no-session-core`, ou para debug em foreground:
 
 ```bash
 cd /home/david/workspace/assistant-hub-ai
 ./scripts/wsl/start-session-core.sh --seed-example
+# background: --background · parar: ./scripts/wsl/stop-session-core.sh
 ```
 
 - **CWD deve ser a raiz do monorepo** (`data/session-core/`, `config/ai-providers.yaml` são relativos).
 - Se a porta **8080** estiver ocupada por **outro** app (ex.: `number-generator`), o script **aborta** e mostra `pid` / `main` / trecho do `cmd`.
-- Background: `--background` · parar: `./scripts/wsl/stop-session-core.sh`
 - Outra porta: `--port 8081` e aponte o shell (`sessionCoreBaseUrl`).
-
-**Verificação:**
-
-```bash
-curl -sS http://127.0.0.1:8080/actuator/health
-# esperado: status UP
-
-curl -sS http://127.0.0.1:8080/api/ai-providers
-# esperado: [] ou lista JSON — NÃO "Erro interno inesperado"
-```
 
 ### 3. Agent Windows (se não abriu no passo 1)
 
@@ -134,18 +138,16 @@ Config local: `%APPDATA%\ai.assistanthub.desktopshell\shell-config.json` (`sessi
 
 ---
 
-## Fluxo mínimo diário (3 passos)
+## Fluxo mínimo diário (2 passos)
 
 ```bash
-# WSL — terminal 1
+# WSL — um terminal basta
 cd /home/david/workspace/assistant-hub-ai
 ./scripts/wsl/start-assistant-hub.sh --no-build
-
-# WSL — terminal 2
-./scripts/wsl/start-session-core.sh --seed-example
 ```
 
 - Browser STT: http://localhost:8001  
+- session-core: http://localhost:8080 (background; `./scripts/wsl/stop-session-core.sh` para parar)  
 - Shell (opcional): `cargo tauri dev --features gui` em `C:\src\...\apps\desktop-shell`
 
 Alternativa a partir do PowerShell Windows (sobe Compose + agent):
@@ -154,7 +156,7 @@ Alternativa a partir do PowerShell Windows (sobe Compose + agent):
 & "\\wsl.localhost\Ubuntu-24.04\home\david\workspace\assistant-hub-ai\scripts\windows\start-assistant-hub.ps1"
 ```
 
-O session-core **não** entra nesse script Windows — rode o passo 2 no WSL à parte.
+O script Windows **não** sobe session-core — use o hub WSL, ou `start-session-core.sh` no WSL à parte.
 
 ---
 

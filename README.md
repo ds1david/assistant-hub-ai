@@ -28,7 +28,7 @@ Esta versão mantém o WSL como ponto único de inicialização e adiciona o pla
 
 O runtime atual continua igual:
 
-- `scripts/wsl/start-assistant-hub.sh` sobe containers, aquece o Whisper e abre o agente Windows.
+- `scripts/wsl/start-assistant-hub.sh` sobe containers, session-core (background), aquece o Whisper e abre o agente Windows.
 - `scripts/wsl/compose.sh` sempre usa `--env-file <raiz>/.env` e `--project-directory <raiz>`.
 - `.env` é criado automaticamente a partir de `.env.example` com permissão `600`.
 - A configuração é validada por `docker compose config --quiet` antes do build.
@@ -119,10 +119,10 @@ Guia completo (STT + session-core + agent + shell, checklist e troubleshooting):
 Resumo após reiniciar o Windows:
 
 1. Abrir o **Docker Desktop**.
-2. WSL: `./scripts/wsl/start-assistant-hub.sh --no-build`
-3. WSL (outro terminal): `./scripts/wsl/start-session-core.sh --seed-example`
-4. Agent Windows (se não abriu sozinho): `scripts/windows/run-audio-agent-foreground.ps1` com `-Session` / `-Profile`
-5. Shell desktop (opcional): em `C:\src\...\apps\desktop-shell` → `cargo tauri dev --features gui`
+2. WSL: `./scripts/wsl/start-assistant-hub.sh --no-build`  
+   (sobe STT, session-core em background com seed se necessário, agent Windows e dashboard)
+3. Agent Windows (se não abriu sozinho): `scripts/windows/run-audio-agent-foreground.ps1` com `-Session` / `-Profile`
+4. Shell desktop (opcional): em `C:\src\...\apps\desktop-shell` → `cargo tauri dev --features gui`
 
 ## Inicialização principal — a partir do WSL
 
@@ -141,9 +141,12 @@ Esse comando:
 4. executa o Compose em background;
 5. aguarda o health check;
 6. carrega o modelo Whisper;
-7. abre um novo PowerShell do Windows;
-8. inicia o agente WASAPI em foreground nesse PowerShell;
-9. abre o dashboard.
+7. sobe o **session-core** em background (`--seed-example` se faltar `config/ai-providers.yaml`);
+8. abre um novo PowerShell do Windows;
+9. inicia o agente WASAPI em foreground nesse PowerShell;
+10. abre o dashboard.
+
+Flags úteis: `--no-session-core`, `--session-core-port 8081`, `--no-seed-example`, `--no-agent`, `--no-browser`.
 
 Rebuild sem cache:
 
@@ -191,7 +194,9 @@ Evite chamar diretamente `docker compose -f infra/compose/...`, pois nesse forma
 
 ## session-core (Memory Hub + AI Provider Hub)
 
-O shell desktop e o hub de provedores usam `http://localhost:8080` por padrão. Suba a partir da **raiz do monorepo** (CWD importa para `data/session-core/` e `config/`):
+Incluído por padrão em `start-assistant-hub.sh` (background). O shell desktop e o hub de provedores usam `http://localhost:8080`.
+
+Standalone (foreground, debug, ou se usou `--no-session-core`) — CWD = **raiz do monorepo**:
 
 ```bash
 ./scripts/wsl/start-session-core.sh

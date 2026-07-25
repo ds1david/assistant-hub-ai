@@ -55,7 +55,7 @@ python3 -m compileall services/transcription-service/app
 python3 -m compileall agents/windows-audio-agent/src
 PYTHONPATH=services/transcription-service pytest -q services/transcription-service/tests
 ./scripts/wsl/start-assistant-hub.sh --no-build
-./scripts/wsl/start-session-core.sh --seed-example
+# sobe STT + session-core (bg) + agent; standalone: ./scripts/wsl/start-session-core.sh
 ```
 
 ## Comandos Windows

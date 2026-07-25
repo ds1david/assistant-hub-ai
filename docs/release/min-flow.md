@@ -47,15 +47,15 @@ chmod +x scripts/bootstrap-wsl-ubuntu.sh scripts/wsl/*.sh
 # bootstrap se ainda não rodou: ./scripts/bootstrap-wsl-ubuntu.sh
 ./scripts/wsl/init-env.sh          # cria .env a partir de .env.example (mode 600)
 ./scripts/wsl/start-assistant-hub.sh
+# sobe STT + session-core (background, seed se necessário) + agent Windows
 # ou suba serviços pontualmente via scripts/wsl/compose.sh
 ```
 
-`session-core` (Memory Hub / API de sessão):
+`session-core` já entra no hub. Standalone (debug / `--no-session-core`):
 
 ```bash
 # Preferido: falha cedo se :8080 já estiver ocupada por outro app (ex.: number-generator)
 ./scripts/wsl/start-session-core.sh
-# opcional: copiar samples/ai-providers e rodar em background
 ./scripts/wsl/start-session-core.sh --seed-example --background
 ./scripts/wsl/stop-session-core.sh
 
@@ -63,7 +63,7 @@ chmod +x scripts/bootstrap-wsl-ubuntu.sh scripts/wsl/*.sh
 mvn -pl services/session-core -am spring-boot:run
 ```
 
-Porta padrão típica do `session-core`: `http://localhost:8080` (confirme em `services/session-core` / config). Se a 8080 estiver tomada, use `--port 8081` e ajuste `sessionCoreBaseUrl` no shell desktop.
+Porta padrão típica do `session-core`: `http://localhost:8080` (confirme em `services/session-core` / config). Se a 8080 estiver tomada, use `--session-core-port 8081` no hub (ou `--port 8081` no standalone) e ajuste `sessionCoreBaseUrl` no shell desktop.
 
 ### Critério “no ar”
 

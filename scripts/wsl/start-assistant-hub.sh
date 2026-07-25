@@ -7,21 +7,30 @@ PROFILE_RELATIVE="samples/audio-profiles/default.yaml"
 REINSTALL_AGENT=false
 OPEN_BROWSER=true
 START_AGENT=true
+START_SESSION_CORE=true
+SEED_SESSION_CORE=true
+SESSION_CORE_PORT="${SERVER_PORT:-8080}"
 BUILD_ARGS=()
 
 usage() {
   cat <<'USAGE'
 Uso: ./scripts/wsl/start-assistant-hub.sh [opções]
 
-  --session NOME       identificador da sessão
-  --profile CAMINHO    perfil relativo à raiz do repositório
-  --no-build           não recompila as imagens Docker
-  --no-cache           recompila sem cache
-  --skip-model-load    não aquece o Whisper
-  --reinstall-agent    reinstala o agente Python do Windows
-  --no-agent           sobe apenas os containers
-  --no-browser         não abre o dashboard
-  -h, --help           mostra esta ajuda
+  --session NOME         identificador da sessão
+  --profile CAMINHO      perfil relativo à raiz do repositório
+  --no-build             não recompila as imagens Docker
+  --no-cache             recompila sem cache
+  --skip-model-load      não aquece o Whisper
+  --reinstall-agent      reinstala o agente Python do Windows
+  --no-agent             sobe apenas os containers (e session-core, se habilitado)
+  --no-browser           não abre o dashboard
+  --no-session-core      não sobe o session-core (Java :8080)
+  --session-core-port N  porta do session-core (default: 8080 ou $SERVER_PORT)
+  --no-seed-example      não copia samples/ai-providers se config estiver ausente
+  -h, --help             mostra esta ajuda
+
+Por padrão sobe STT (Docker), session-core em background (--seed-example),
+abre o agent WASAPI no Windows e o dashboard em :8001.
 USAGE
 }
 
@@ -33,6 +42,9 @@ while [[ $# -gt 0 ]]; do
     --reinstall-agent) REINSTALL_AGENT=true ;;
     --no-agent) START_AGENT=false ;;
     --no-browser) OPEN_BROWSER=false ;;
+    --no-session-core) START_SESSION_CORE=false ;;
+    --session-core-port) SESSION_CORE_PORT="${2:?Informe a porta}"; shift ;;
+    --no-seed-example) SEED_SESSION_CORE=false ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Opção desconhecida: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -46,6 +58,16 @@ if [[ ! -f "$PROFILE_LINUX" ]]; then
 fi
 
 "$REPO_ROOT/scripts/wsl/rebuild-and-start.sh" "${BUILD_ARGS[@]}"
+
+if [[ "$START_SESSION_CORE" == true ]]; then
+  SESSION_CORE_ARGS=(--background --port "$SESSION_CORE_PORT")
+  if [[ "$SEED_SESSION_CORE" == true ]]; then
+    SESSION_CORE_ARGS+=(--seed-example)
+  fi
+  echo "==> session-core (background)"
+  # Propaga falha de porta ocupada / health timeout — o script filho já imprime diagnóstico.
+  "$REPO_ROOT/scripts/wsl/start-session-core.sh" "${SESSION_CORE_ARGS[@]}"
+fi
 
 ps_quote() {
   local value="$1"
@@ -84,3 +106,7 @@ echo "Assistant Hub AI iniciado a partir do WSL."
 echo "Session: $SESSION"
 echo "Profile: $PROFILE_RELATIVE"
 echo "Dashboard: http://localhost:8001"
+if [[ "$START_SESSION_CORE" == true ]]; then
+  echo "session-core: http://127.0.0.1:${SESSION_CORE_PORT}"
+  echo "  stop: ./scripts/wsl/stop-session-core.sh"
+fi
