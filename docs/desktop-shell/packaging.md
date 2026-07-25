@@ -42,12 +42,15 @@ cd ..
 #    genérico do Tauri.
 # cargo tauri icon caminho/para/icone-fonte.png
 
-# 5. Build de desenvolvimento (abre a janela do shell apontando para o Vite dev server)
-cargo tauri dev
+# 5. Build de desenvolvimento (abre a janela do shell apontando para o Vite dev server).
+#    A feature Cargo `gui` é obrigatória: o binário Tauri usa `required-features = ["gui"]`
+#    para permitir `cargo test` da lib no WSL sem WebView2/GTK.
+#    Use um caminho com letra de unidade (C:\...), não UNC (\\wsl.localhost\...).
+cargo tauri dev --features gui
 
 # 6. Build de produção — gera o instalador Windows (MSI e NSIS, conforme
 #    src-tauri/tauri.conf.json § bundle.targets)
-cargo tauri build
+cargo tauri build --features gui
 ```
 
 **Esperado no passo 6**: os instaladores aparecem em
@@ -72,6 +75,10 @@ Na primeira execução, o shell cria `shell-config.json` no diretório de config
 
 | Sintoma | Causa provável | Ação |
 |---|---|---|
+| `OUT_DIR env var is not set` / `generate_context!` | `build.rs` ausente ou `tauri-build` não listado em `[build-dependencies]` | Confirmar `src-tauri/build.rs` chama `tauri_build::build()` |
+| `requires the features: gui` | `cargo tauri` sem `--features gui` | Passar `--features gui` (ou `"features": ["gui"]` em `tauri.conf.json` § build) |
+| `EBUSY` / Vite morre no `beforeDevCommand` | Vite assistindo `src-tauri/target` | `vite.config.ts` deve ignorar `**/src-tauri/**` no `server.watch` |
+| UNC path / `C:\Windows\package.json` | Projeto aberto via `\\wsl.localhost\...` | Clonar ou mapear para letra de unidade (`C:\...`) |
 | `cargo tauri build` falha em "WebView2 not found" | Runtime do WebView2 ausente | Instalar o Evergreen Bootstrapper da Microsoft |
 | Erro de linker (`link.exe` não encontrado) | Build Tools do C++ ausentes | Instalar o workload "Desktop development with C++" do Visual Studio Build Tools |
 | Shell abre mas não mostra status de sessão | `session-core` não está acessível na URL configurada | Conferir `shell-config.json` e que `GET <url>/actuator/health` responde `UP` |
