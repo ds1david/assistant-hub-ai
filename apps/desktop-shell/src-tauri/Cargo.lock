@@ -592,6 +592,7 @@ dependencies = [
  "serde_json",
  "sysinfo",
  "tauri",
+ "tauri-build",
 ]
 
 [[package]]
