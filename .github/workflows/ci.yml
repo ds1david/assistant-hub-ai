@@ -65,7 +65,7 @@ jobs:
         run: |
           EXPECTED=$(tr -d '[:space:]' < VERSION)
           PYTHONPATH=services/transcription-service \
-            python -c "from app.main import app; assert app.version == '0.1.8', (app.version, '${EXPECTED}')"
+            python -c "from app.main import app; assert app.version == '0.2.0', (app.version, '${EXPECTED}')"
 
   windows-audio-agent-unit:
     runs-on: ubuntu-latest
@@ -124,3 +124,26 @@ jobs:
           else
             echo "compose wrapper ausente; skip"
           fi
+
+  # Smoke mínimo do shell desktop (lib Rust + frontend). Sem tauri build/MSI (Windows-only).
+  desktop-shell-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop-shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/desktop-shell/package-lock.json
+      - name: Frontend install, test, build
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust lib tests (no GUI / no tauri build)
+        working-directory: apps/desktop-shell/src-tauri
+        run: cargo test
