@@ -5,7 +5,7 @@ import {
   normalizeSourceType,
   isOriginEnabled,
 } from "./assistant-auto";
-import type { AssistantSessionPreferences, CanonicalSourceType } from "./assistant-prefs";
+import type { CanonicalSourceType } from "./assistant-prefs";
 
 export type AlignmentState =
   | "no_active_session"
