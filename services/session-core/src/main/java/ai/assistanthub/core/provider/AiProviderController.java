@@ -132,9 +132,18 @@ public class AiProviderController {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(Map.of("error", e.getMessage()));
     }
 
+    /** Origem de canal não resolvível / UUID inválido com channelId (issue #40) — não aciona fallback. */
+    @ExceptionHandler(ChannelOriginUnresolvedException.class)
+    public ResponseEntity<Map<String, String>> handleChannelOriginUnresolved(ChannelOriginUnresolvedException e) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(Map.of("error", e.getMessage()));
+    }
+
     public record SetEnabledRequest(boolean enabled) {
     }
 
+    /**
+     * Entrada de invoke — sem {@code sourceType}: origem é resolvida no servidor a partir da sessão.
+     */
     public record InvokeRequest(
             @NotBlank String sessionId,
             String channelId,

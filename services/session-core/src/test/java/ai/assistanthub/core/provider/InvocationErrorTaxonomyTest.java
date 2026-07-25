@@ -38,7 +38,7 @@ class InvocationErrorTaxonomyTest {
         ProviderProfileStore store = ProviderTestSupport.newStore(tempDir, validator);
         ProviderRegistry registry = ProviderTestSupport.newRegistry(store);
         InvocationService invocationService = ProviderTestSupport.newInvocationService(registry, new FakeProviderAdapter());
-        return invocationService.invoke("chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+        return invocationService.invoke("chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
     }
 
     @Test
@@ -67,7 +67,7 @@ class InvocationErrorTaxonomyTest {
                 ProviderTestSupport.newInvocationService(ProviderTestSupport.newRegistry(store), new FakeProviderAdapter());
 
         InvocationResult result = invocationService.invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.errorType()).isEqualTo(InvocationErrorType.TIMEOUT);
     }
@@ -95,7 +95,7 @@ class InvocationErrorTaxonomyTest {
                 ProviderTestSupport.newInvocationService(ProviderTestSupport.newRegistry(store), new FakeProviderAdapter());
 
         InvocationResult result = invocationService.invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.errorType()).isEqualTo(InvocationErrorType.CAPABILITY_MISMATCH);
     }

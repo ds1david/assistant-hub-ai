@@ -44,7 +44,7 @@ class InvocationTimeoutAndFallbackTest {
                 Map.of("chat-route", new ProviderRoute("primary", List.of("fallback"))));
 
         InvocationResult result = serviceFor(profile).invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isTrue();
         assertThat(result.providerId()).isEqualTo("fallback");
@@ -58,7 +58,7 @@ class InvocationTimeoutAndFallbackTest {
                 Map.of("chat-route", new ProviderRoute("primary", List.of())));
 
         InvocationResult result = serviceFor(profile).invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isFalse();
         assertThat(result.errorType()).isEqualTo(InvocationErrorType.TIMEOUT);
@@ -74,7 +74,7 @@ class InvocationTimeoutAndFallbackTest {
                 Map.of("chat-route", new ProviderRoute("primary", List.of("fallback"))));
 
         InvocationResult result = serviceFor(profile).invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isTrue();
         assertThat(result.providerId()).isEqualTo("fallback");
@@ -90,7 +90,7 @@ class InvocationTimeoutAndFallbackTest {
                 Map.of("chat-route", new ProviderRoute("primary", List.of("fallback"))));
 
         InvocationResult result = serviceFor(profile).invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isTrue();
         assertThat(result.providerId()).isEqualTo("fallback");
@@ -104,7 +104,7 @@ class InvocationTimeoutAndFallbackTest {
                 Map.of("chat-route", new ProviderRoute("primary", List.of())));
 
         InvocationResult result = serviceFor(profile).invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isFalse();
         assertThat(result.message()).contains("nenhum provedor habilitado");

@@ -71,6 +71,9 @@ pub struct InvocationResult {
     pub session_id: String,
     #[serde(rename = "channelId", skip_serializing_if = "Option::is_none")]
     pub channel_id: Option<String>,
+    /// Server-resolved channel origin (`microphone` | `system`); absent when invoke has no channel.
+    #[serde(rename = "sourceType", skip_serializing_if = "Option::is_none")]
+    pub source_type: Option<String>,
     pub success: bool,
     #[serde(rename = "errorType", skip_serializing_if = "Option::is_none")]
     pub error_type: Option<String>,

@@ -142,6 +142,8 @@ export interface InvocationResult {
   capability: string;
   sessionId: string;
   channelId?: string | null;
+  /** Server-resolved channel origin (microphone | system); null when invoke has no channel. */
+  sourceType?: string | null;
   success: boolean;
   errorType?: InvocationErrorType | null;
   output?: string | null;

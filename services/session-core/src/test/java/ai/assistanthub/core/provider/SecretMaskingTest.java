@@ -97,7 +97,7 @@ class SecretMaskingTest {
                 new AiProviderController(registry, invocationService, secretRef -> Optional.of(RAW_SECRET));
 
         InvocationResult result = invocationService.invoke(
-                "chat-route", new InvocationRequest("s1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("s1", null, "chat", "ola"));
         assertThat(result.success()).isTrue();
 
         // 1) nunca no log estruturado da invocação (FR-008/FR-007)

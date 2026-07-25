@@ -41,7 +41,7 @@ class FakeProviderInvocationTest {
         InvocationService invocationService = ProviderTestSupport.newInvocationService(registry, new FakeProviderAdapter());
 
         InvocationResult result = invocationService.invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isTrue();
         assertThat(result.providerId()).isEqualTo("fake-1");
@@ -67,7 +67,7 @@ class FakeProviderInvocationTest {
         InvocationService invocationService = ProviderTestSupport.newInvocationService(registry, new FakeProviderAdapter());
 
         InvocationResult result = invocationService.invoke(
-                "chat-route", new InvocationRequest("session-1", "mic-1", "chat", "ola"));
+                "chat-route", new InvocationRequest("session-1", null, "chat", "ola"));
 
         assertThat(result.success()).isFalse();
         assertThat(result.errorType()).isEqualTo(InvocationErrorType.CAPABILITY_MISMATCH);
