@@ -146,12 +146,23 @@ Instalador: `cargo tauri build --features gui` — artefatos em `src-tauri\targe
 **Sessão e Assistente (feature live-answer):**
 
 1. No shell, **liste / crie / selecione** a sessão (não há auto-create silencioso). Criar usa defaults `title=Sessão local` e `profileId=interview-technical`.
-2. Anote o **id da sessão ativa** na UI e use o **mesmo** `-Session <id>` no agent WASAPI.
-3. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota de invoke: `live-answer` / capability `chat`.
-4. Com automático ligado e pergunta final no canal habilitado, a resposta aparece no painel (conflito cancelar/aguardar se chegar outra pergunta durante geração).
-5. Preferências do Assistente ficam em `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
+2. **Regra do sessionId único (issue #47):** shell (sessão ativa), agent WASAPI e STT **devem** usar o **mesmo** identificador. Transcript e Assistente só reagem a eventos da sessão ativa da UI.
+3. **Preferir iniciar/reiniciar o agent pela UI** (painel Agent, modo Direct): o shell passa o UUID da sessão ativa. Se houver **mismatch** (sessão do agent ≠ ativa), use **«Reiniciar agent com sessão ativa»** (sem diálogo extra).
+4. **Selecionar outra sessão na lista NÃO reconfigura** um agent já em execução — só muda feed/Assistente; o banner de mismatch aparece até você reiniciar (UI) ou parar/iniciar manualmente.
+5. Agent iniciado **fora** do shell (PowerShell): o shell **não** encerra o processo externo. Pare manualmente e rode com o UUID da UI, por exemplo:
 
-**Verificação:** janela abre; lista de sessões via `GET /api/sessions`; agent “ativo” se o processo `assistant-hub-audio` estiver rodando; salvar provedor **sem** HTTP 500; painel de provedores (`list`/`test`) continua utilizável com o Assistente.
+```powershell
+# UUID = «Sessão ativa» no shell (data-testid session-active-id)
+.\scripts\windows\run-audio-agent-foreground.ps1 `
+  -Session <uuid-da-sessao-ativa> `
+  -Profile samples\audio-profiles\<perfil>.yaml
+# ou: assistant-hub-audio run --session <uuid-da-sessao-ativa> --profile <perfil.yaml>
+```
+
+6. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** reconhecidos como pergunta (partials **não** disparam — empty state «aguardando trecho final»).
+7. Preferências do Assistente: `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
+
+**Verificação:** janela abre; lista de sessões via `GET /api/sessions`; agent e UI com o **mesmo** sessionId (sem banner de mismatch); salvar provedor **sem** HTTP 500; com automático on + final elegível → interação no Assistente (ou erro de provedor legível).
 
 Config local: `%APPDATA%\ai.assistanthub.desktopshell\shell-config.json` (`sessionCoreBaseUrl`, padrão `http://localhost:8080`). Sample de rota `live-answer`: `samples/ai-providers/providers.example.yaml` (seed em `config/ai-providers.yaml` se o hub copiar o sample).
 

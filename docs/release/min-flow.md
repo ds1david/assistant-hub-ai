@@ -134,15 +134,19 @@ cargo tauri dev
 
 Configure `sessionCoreBaseUrl` (padrão `http://localhost:8080`) no config do app se necessário.
 
+### sessionId único (UI ↔ agent ↔ STT)
+
+Shell, agent WASAPI e STT devem usar o **mesmo** `sessionId`. Preferir **Iniciar / Reiniciar agent com sessão ativa** no painel do shell. **Selecionar sessão na lista não reconfigura** agent já em execução — se divergir, o shell mostra mismatch (e CTA de reinício em modo Direct). Detalhes e exemplo PowerShell: [docs/development/running.md](../development/running.md) (seção Sessão e Assistente).
+
 ### Critério “no ar”
 
 | Check | Esperado |
 |-------|----------|
 | Janela | Shell abre (WebView2) |
 | Sessão | Status de sessão/canais ou health do `session-core` refletido na UI |
-| Agent | Painel do agent não fica permanentemente inconsistente com o processo real (ver packaging troubleshooting) |
+| Agent | Painel do agent não fica permanentemente inconsistente com o processo real; **mesmo sessionId** da sessão ativa (sem banner de mismatch) |
 
-Falhas comuns: WebView2 ausente; `session-core` down; build só no WSL sem GTK/WebKit (use Windows nativo para o binário Tauri).
+Falhas comuns: WebView2 ausente; `session-core` down; build só no WSL sem GTK/WebKit (use Windows nativo para o binário Tauri); agent com outro `--session` que a UI.
 
 ---
 

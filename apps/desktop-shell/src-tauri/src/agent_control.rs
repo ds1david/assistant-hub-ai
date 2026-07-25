@@ -1,24 +1,30 @@
-//! Detecção e controle do agent Windows (`assistant-hub-audio`) — US3 (FR-006/FR-007/FR-008).
-//! O agent não expõe nenhuma API de health/status hoje (research.md, Decisão 5); a detecção é
-//! feita por enumeração de processo (`sysinfo`), casando pelo nome do executável/linha de
-//! comando conhecidos.
+//! Detecção e controle do agent Windows (`assistant-hub-audio`).
+//! Resolução de sessionId do agent: cmdline `--session` → último start gerenciado → desconhecida
+//! (specs/020-issue-47-sessionid-align).
 
 use serde::Serialize;
+use std::ffi::OsString;
 use std::process::Child;
 use sysinfo::System;
 
 /// Nome do binário/processo do agent Windows, usado para casar na enumeração de processos.
-/// Em Windows real o executável é `assistant-hub-audio.exe`; mantemos os dois nomes possíveis
-/// (com e sem extensão) para tolerar diferenças de empacotamento.
 const AGENT_PROCESS_NAMES: [&str; 2] = ["assistant-hub-audio", "assistant-hub-audio.exe"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ControlMode {
-    /// O shell iniciou o processo e detém o handle — pode parar diretamente.
+    /// O shell pode iniciar (parado) ou parar (handle) diretamente.
     Direct,
-    /// O processo foi encontrado rodando fora do shell (ou o handle não está disponível) —
-    /// só é possível orientar o operador.
+    /// Processo em execução fora do shell — só orientação manual.
     Guided,
+}
+
+/// Como `agent_session_id` foi resolvido (FR-005).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentSessionSource {
+    Cmdline,
+    Managed,
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -26,31 +32,126 @@ pub enum ControlMode {
 pub struct AgentStatus {
     pub running: bool,
     pub control_mode: ControlMode,
-    /// Comando exato e reproduzível para o operador rodar manualmente (FR-007), sempre
-    /// preenchido — mesmo quando `control_mode = Direct`, serve como fallback textual.
+    /// Comando exato e reproduzível para o operador rodar manualmente.
     pub guidance_command: String,
     pub last_error: Option<String>,
+    /// Sessão resolvida do agent; None se desconhecida ou N/A.
+    pub agent_session_id: Option<String>,
+    pub agent_session_source: AgentSessionSource,
 }
 
-/// Constrói o comando exato que o operador rodaria manualmente (FR-007), no mesmo formato
-/// documentado em AGENTS.md § "Comandos Windows".
+/// Constrói o comando exato que o operador rodaria manualmente.
 pub fn guidance_command(session_id: &str, profile_path: &str) -> String {
     format!("assistant-hub-audio run --session {session_id} --profile {profile_path}")
 }
 
-/// Detecta se o agent está rodando enumerando processos do sistema operacional — único sinal
-/// disponível hoje, já que o agent não expõe status/PID/health (ver research.md, Decisão 5).
-/// Não requer que o shell tenha iniciado o processo.
-///
-/// Checa tanto `Process::name()` quanto o nome de arquivo de `Process::exe()`: no Linux, o
-/// `comm` do kernel (usado por `name()`) trunca em 15 caracteres (`TASK_COMM_LEN`), cortando
-/// "assistant-hub-audio" para "assistant-hub-a" — achado real ao testar a detecção neste WSL
-/// (o Windows, alvo de produção, não tem essa limitação). Checar `exe()` também evita esse
-/// falso negativo em qualquer plataforma.
+/// Extrai `--session <id>` ou `--session=<id>` da linha de comando (último vence).
+pub fn parse_session_from_cmd(args: &[OsString]) -> Option<String> {
+    let mut found: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i].to_string_lossy();
+        if arg == "--session" {
+            if let Some(next) = args.get(i + 1) {
+                let id = next.to_string_lossy().trim().to_string();
+                if !id.is_empty() && !id.starts_with('-') {
+                    found = Some(id);
+                }
+                i += 2;
+                continue;
+            }
+        } else if let Some(rest) = arg.strip_prefix("--session=") {
+            let id = rest.trim();
+            if !id.is_empty() {
+                found = Some(id.to_string());
+            }
+        }
+        i += 1;
+    }
+    found
+}
+
+/// Prioridade: cmdline → managed (com handle) → unknown. Nunca inventa id.
+pub fn resolve_agent_session(
+    running: bool,
+    cmdline_id: Option<&str>,
+    last_managed_id: Option<&str>,
+    has_managed_handle: bool,
+) -> (Option<String>, AgentSessionSource) {
+    if !running {
+        return (None, AgentSessionSource::Unknown);
+    }
+    if let Some(id) = cmdline_id.map(str::trim).filter(|s| !s.is_empty()) {
+        return (Some(id.to_string()), AgentSessionSource::Cmdline);
+    }
+    if has_managed_handle {
+        if let Some(id) = last_managed_id.map(str::trim).filter(|s| !s.is_empty()) {
+            return (Some(id.to_string()), AgentSessionSource::Managed);
+        }
+    }
+    (None, AgentSessionSource::Unknown)
+}
+
+/// I1: parado → Direct; running+handle → Direct; running sem handle → Guided.
+pub fn resolve_control_mode(running: bool, has_managed_handle: bool) -> ControlMode {
+    if !running {
+        ControlMode::Direct
+    } else if has_managed_handle {
+        ControlMode::Direct
+    } else {
+        ControlMode::Guided
+    }
+}
+
+/// Detecta se o agent está rodando enumerando processos.
 pub fn detect_running() -> bool {
     let mut system = System::new();
     system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     system.processes().values().any(process_matches_agent)
+}
+
+/// Tenta obter `--session` da cmdline do primeiro processo agent com parse válido.
+pub fn detect_agent_cmdline_session() -> Option<String> {
+    let mut system = System::new();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    for process in system.processes().values() {
+        if !process_matches_agent(process) {
+            continue;
+        }
+        if let Some(id) = parse_session_from_cmd(process.cmd()) {
+            return Some(id);
+        }
+    }
+    None
+}
+
+/// Monta status completo a partir de sinais de runtime.
+pub fn build_status(
+    running: bool,
+    has_managed_handle: bool,
+    last_managed_session_id: Option<&str>,
+    guidance_command: String,
+    last_error: Option<String>,
+) -> AgentStatus {
+    let cmdline_id = if running {
+        detect_agent_cmdline_session()
+    } else {
+        None
+    };
+    let (agent_session_id, agent_session_source) = resolve_agent_session(
+        running,
+        cmdline_id.as_deref(),
+        last_managed_session_id,
+        has_managed_handle,
+    );
+    AgentStatus {
+        running,
+        control_mode: resolve_control_mode(running, has_managed_handle),
+        guidance_command,
+        last_error,
+        agent_session_id,
+        agent_session_source,
+    }
 }
 
 fn process_matches_agent(process: &sysinfo::Process) -> bool {
@@ -62,19 +163,13 @@ fn process_matches_agent(process: &sysinfo::Process) -> bool {
 
     AGENT_PROCESS_NAMES.iter().any(|candidate| {
         let candidate = candidate.to_lowercase();
-        // Igual, ou "name" é exatamente o comm truncado do Linux (15 chars, TASK_COMM_LEN-1)
-        // e é prefixo de "candidate" (evita falso positivo com nomes curtos não relacionados),
-        // ou o nome de arquivo do executável bate exatamente (não sofre truncamento).
         name == candidate
             || (name.len() == 15 && candidate.starts_with(&name))
             || exe_file_name.as_deref() == Some(candidate.as_str())
     })
 }
 
-/// Handle de um processo do agent que o próprio shell iniciou — permite parada direta
-/// (`ControlMode::Direct`). Nenhuma instância de PyAudio/WASAPI é tocada aqui; o shell só
-/// gerencia o processo do agent como um todo (isolamento por endpoint continua no agent,
-/// ADR-0007).
+/// Handle de um processo do agent que o próprio shell iniciou.
 #[derive(Debug)]
 pub struct ManagedAgentProcess {
     child: Child,
@@ -82,14 +177,9 @@ pub struct ManagedAgentProcess {
 
 #[derive(Debug)]
 pub enum StartError {
-    /// Binário `assistant-hub-audio` não encontrado no PATH.
     BinaryNotFound,
-    /// O processo já está em execução (fora do shell) — não faz sentido iniciar de novo.
     AlreadyRunning,
-    /// O processo iniciou mas encerrou imediatamente (falha parcial) — código de saída, se
-    /// disponível.
     ExitedImmediately(Option<i32>),
-    /// Falha de sistema operacional ao tentar spawnar (ex.: permissão negada).
     Os(String),
 }
 
@@ -111,10 +201,7 @@ impl std::fmt::Display for StartError {
 
 impl std::error::Error for StartError {}
 
-/// Inicia o agent diretamente (`ControlMode::Direct`) usando o `command` fornecido pelo
-/// chamador (em produção, o comando resolvido a partir de PATH; em teste, um executável fake).
-/// Não inicia se um processo com o mesmo nome já for detectado rodando fora do shell
-/// (FR-008 — evita duas instâncias concorrentes sem diagnóstico claro).
+/// Inicia o agent diretamente. Não inicia se já houver processo agent rodando.
 pub fn start(mut command: std::process::Command) -> Result<ManagedAgentProcess, StartError> {
     if detect_running() {
         return Err(StartError::AlreadyRunning);
@@ -128,7 +215,6 @@ pub fn start(mut command: std::process::Command) -> Result<ManagedAgentProcess, 
         }
     })?;
 
-    // Falha parcial: o processo spawnou mas encerrou antes de estabilizar.
     std::thread::sleep(std::time::Duration::from_millis(50));
     if let Ok(Some(status)) = child.try_wait() {
         return Err(StartError::ExitedImmediately(status.code()));
@@ -137,7 +223,7 @@ pub fn start(mut command: std::process::Command) -> Result<ManagedAgentProcess, 
     Ok(ManagedAgentProcess { child })
 }
 
-/// Encerra um processo que o shell iniciou diretamente (`ControlMode::Direct`).
+/// Encerra um processo que o shell iniciou diretamente.
 pub fn stop(managed: &mut ManagedAgentProcess) -> Result<(), StartError> {
     managed
         .child
@@ -152,6 +238,10 @@ mod tests {
     use super::*;
     use std::process::Command;
 
+    fn os(s: &str) -> OsString {
+        OsString::from(s)
+    }
+
     #[test]
     fn guidance_command_is_exact_and_reproducible() {
         let cmd = guidance_command("11111111-1111-1111-1111-111111111111", "perfil.yaml");
@@ -162,11 +252,79 @@ mod tests {
     }
 
     #[test]
+    fn parse_session_from_cmd_separated_form() {
+        let args = vec![
+            os("assistant-hub-audio"),
+            os("run"),
+            os("--session"),
+            os("sess-a"),
+            os("--profile"),
+            os("p.yaml"),
+        ];
+        assert_eq!(parse_session_from_cmd(&args).as_deref(), Some("sess-a"));
+    }
+
+    #[test]
+    fn parse_session_from_cmd_equals_form_and_last_wins() {
+        let args = vec![
+            os("assistant-hub-audio"),
+            os("--session=first"),
+            os("--session"),
+            os("second"),
+        ];
+        assert_eq!(parse_session_from_cmd(&args).as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn parse_session_from_cmd_missing_returns_none() {
+        let args = vec![os("assistant-hub-audio"), os("run"), os("--profile"), os("p.yaml")];
+        assert_eq!(parse_session_from_cmd(&args), None);
+    }
+
+    #[test]
+    fn resolve_agent_session_priority_cmdline_over_managed() {
+        let (id, src) = resolve_agent_session(true, Some("from-cmd"), Some("from-managed"), true);
+        assert_eq!(id.as_deref(), Some("from-cmd"));
+        assert_eq!(src, AgentSessionSource::Cmdline);
+    }
+
+    #[test]
+    fn resolve_agent_session_managed_when_no_cmdline() {
+        let (id, src) = resolve_agent_session(true, None, Some("managed-id"), true);
+        assert_eq!(id.as_deref(), Some("managed-id"));
+        assert_eq!(src, AgentSessionSource::Managed);
+    }
+
+    #[test]
+    fn resolve_agent_session_unknown_when_no_sources() {
+        let (id, src) = resolve_agent_session(true, None, None, false);
+        assert_eq!(id, None);
+        assert_eq!(src, AgentSessionSource::Unknown);
+    }
+
+    #[test]
+    fn resolve_agent_session_not_running_clears_id() {
+        let (id, src) = resolve_agent_session(false, Some("x"), Some("y"), true);
+        assert_eq!(id, None);
+        assert_eq!(src, AgentSessionSource::Unknown);
+    }
+
+    #[test]
+    fn resolve_control_mode_stopped_is_direct_i1() {
+        assert_eq!(resolve_control_mode(false, false), ControlMode::Direct);
+        assert_eq!(resolve_control_mode(false, true), ControlMode::Direct);
+    }
+
+    #[test]
+    fn resolve_control_mode_running_external_is_guided() {
+        assert_eq!(resolve_control_mode(true, false), ControlMode::Guided);
+        assert_eq!(resolve_control_mode(true, true), ControlMode::Direct);
+    }
+
+    #[test]
     fn start_with_missing_binary_reports_specific_error() {
         let command = Command::new("um-binario-que-nao-existe-de-verdade-12345");
-
         let result = start(command);
-
         match result {
             Err(StartError::BinaryNotFound) => {}
             other => panic!("esperado StartError::BinaryNotFound, obtido {other:?}"),
@@ -175,13 +333,9 @@ mod tests {
 
     #[test]
     fn start_with_process_that_exits_immediately_reports_specific_error() {
-        // Executável fake: roda `true` (encerra imediatamente com sucesso), simulando uma
-        // falha parcial de start (FR-008) sem depender do binário real do agent.
         let mut command = Command::new("true");
         command.args::<[&str; 0], &str>([]);
-
         let result = start(command);
-
         match result {
             Err(StartError::ExitedImmediately(_)) => {}
             other => panic!("esperado StartError::ExitedImmediately, obtido {other:?}"),
@@ -190,10 +344,8 @@ mod tests {
 
     #[test]
     fn start_and_stop_a_fake_long_running_process_direct_control() {
-        // Executável fake de longa duração: simula o agent real rodando em foreground.
         let mut command = Command::new("sleep");
         command.arg("5");
-
         let mut managed = start(command).expect("start deve funcionar com processo fake");
         assert!(stop(&mut managed).is_ok());
     }

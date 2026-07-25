@@ -15,8 +15,10 @@ import {
   startAgent,
   stopAgent,
   testAiProviderConnection,
+  type AgentStatus,
   type Provider,
   type SessionSummary,
+  type TranscriptFeedEntry,
 } from "./api-client";
 import { AssistantAutoController } from "./assistant-auto";
 import { renderAssistantPanel } from "./assistant-panel";
@@ -33,6 +35,15 @@ import { renderSessionPicker } from "./session-picker";
 import { renderTranscriptFeed } from "./transcript-feed";
 import { renderAgentPanel } from "./agent-panel";
 import { renderAiProviderPanel, type AiProviderPanelState } from "./ai-provider-panel";
+import {
+  onSessionSelected,
+  restartAgentWithActiveSession,
+} from "./agent-session-actions";
+import {
+  resolveAlignment,
+  resolveAssistantEmptyKind,
+  withActiveGuidance,
+} from "./session-alignment";
 
 const STATUS_POLL_MS = 5000;
 const FEED_POLL_MS = 2000;
@@ -49,6 +60,15 @@ let sessionList: SessionSummary[] = [];
 let sessionListError: string | null = null;
 let sessionBusy = false;
 let coreReachable = true;
+/** Último feed da sessão ativa (empty states FR-010). */
+let lastTranscriptFeed: TranscriptFeedEntry[] = [];
+/** Último status do agent (alignment + empty kind). */
+let lastAgentStatus: AgentStatus | null = null;
+
+const agentProcessActions = {
+  start: (sessionId: string, profilePath: string) => startAgent(sessionId, profilePath),
+  stop: () => stopAgent(),
+};
 
 let aiProviderPanelState: AiProviderPanelState = {
   providers: [],
@@ -125,9 +145,31 @@ function updateAssistantGuards(): void {
   assistantController.setControlsDisabled(false, null);
 }
 
+function computeAssistantEmptyKind() {
+  const view = assistantController.getView();
+  if (view.turns.length > 0) {
+    return null;
+  }
+  const alignment = resolveAlignment(activeSessionId, {
+    running: lastAgentStatus?.running ?? false,
+    agentSessionId: lastAgentStatus?.agentSessionId ?? null,
+  });
+  return resolveAssistantEmptyKind({
+    alignment,
+    autoEnabled: view.prefs.autoEnabled,
+    enabledSourceTypes: view.prefs.enabledSourceTypes,
+    feed: lastTranscriptFeed,
+  });
+}
+
 /** Só renderiza o painel — não reaplica guards (evita loop setControlsDisabled → onChange → paint). */
 function paintAssistant(): void {
-  renderAssistantPanel(assistantPanelContainer(), assistantController.getView(), {
+  const base = assistantController.getView();
+  const view = {
+    ...base,
+    emptyKind: base.turns.length === 0 ? computeAssistantEmptyKind() : null,
+  };
+  renderAssistantPanel(assistantPanelContainer(), view, {
     onToggleEnabled: (enabled) => {
       const prefs = { ...currentPrefsFromController(), autoEnabled: enabled };
       assistantController.setPrefs(prefs);
@@ -189,8 +231,12 @@ function paintSessionPicker(): void {
 }
 
 export async function selectSession(sessionId: string): Promise<void> {
-  activeSessionId = sessionId;
+  // FR-009: troca de sessão NÃO reinicia o agent (onSessionSelected não chama stop/start).
+  onSessionSelected(sessionId, (id) => {
+    activeSessionId = id;
+  }, agentProcessActions);
   transcriptPrimed = false;
+  lastTranscriptFeed = [];
   assistantController.resetSessionState();
   try {
     const prefs = await loadPrefs(sessionId);
@@ -205,6 +251,7 @@ export async function selectSession(sessionId: string): Promise<void> {
   paintSessionPicker();
   // updateAssistantGuards emite se o estado mudou; paint cobre o caso sem mudança.
   paintAssistant();
+  void refreshAgentPanel();
   void pollSessionStatus();
   void pollTranscriptFeed();
 }
@@ -278,6 +325,7 @@ async function pollTranscriptFeed(): Promise<void> {
   }
   try {
     const entries = await getTranscriptFeed(activeSessionId);
+    lastTranscriptFeed = entries;
     renderTranscriptFeed(transcriptFeedContainer(), entries);
     if (!transcriptPrimed) {
       assistantController.markSeen(entries);
@@ -285,6 +333,7 @@ async function pollTranscriptFeed(): Promise<void> {
     } else {
       assistantController.ingestTranscript(entries);
     }
+    paintAssistant();
   } catch (error) {
     console.error("Falha ao consultar o feed de transcript", error);
   }
@@ -292,30 +341,52 @@ async function pollTranscriptFeed(): Promise<void> {
 
 async function refreshAgentPanel(): Promise<void> {
   try {
-    const status = await getAgentStatus();
-    renderAgentPanel(agentPanelContainer(), status, {
-      onStart: async () => {
-        if (!activeSessionId) {
-          return;
-        }
-        try {
-          await startAgent(activeSessionId, DEFAULT_PROFILE_PATH);
-        } catch (error) {
-          console.error("Falha ao iniciar o agent", error);
-        } finally {
-          await refreshAgentPanel();
-        }
+    let status = await getAgentStatus();
+    status = withActiveGuidance(status, activeSessionId, DEFAULT_PROFILE_PATH);
+    lastAgentStatus = status;
+    renderAgentPanel(
+      agentPanelContainer(),
+      { status, activeSessionId },
+      {
+        onStart: async () => {
+          if (!activeSessionId) {
+            return;
+          }
+          try {
+            await startAgent(activeSessionId, DEFAULT_PROFILE_PATH);
+          } catch (error) {
+            console.error("Falha ao iniciar o agent", error);
+          } finally {
+            await refreshAgentPanel();
+          }
+        },
+        onStop: async () => {
+          try {
+            await stopAgent();
+          } catch (error) {
+            console.error("Falha ao parar o agent", error);
+          } finally {
+            await refreshAgentPanel();
+          }
+        },
+        onRestart: async () => {
+          try {
+            await restartAgentWithActiveSession(
+              activeSessionId,
+              status.controlMode,
+              status.running,
+              DEFAULT_PROFILE_PATH,
+              agentProcessActions,
+            );
+          } catch (error) {
+            console.error("Falha ao reiniciar o agent com sessão ativa", error);
+          } finally {
+            await refreshAgentPanel();
+          }
+        },
       },
-      onStop: async () => {
-        try {
-          await stopAgent();
-        } catch (error) {
-          console.error("Falha ao parar o agent", error);
-        } finally {
-          await refreshAgentPanel();
-        }
-      },
-    });
+    );
+    paintAssistant();
   } catch (error) {
     console.error("Falha ao consultar status do agent", error);
   }

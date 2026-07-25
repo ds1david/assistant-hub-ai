@@ -7,7 +7,9 @@
 // (docs/desktop-shell/packaging.md).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use desktop_shell::agent_control::{self, AgentStatus, ControlMode, ManagedAgentProcess};
+use desktop_shell::agent_control::{
+    self, AgentSessionSource, AgentStatus, ControlMode, ManagedAgentProcess,
+};
 use desktop_shell::ai_provider_client::{
     AiProviderClient, ConnectionTestResult, InvocationResult, Provider, SecretPreview,
 };
@@ -26,6 +28,8 @@ use tauri::{Manager, State};
 struct AppState {
     config: Mutex<ShellConfig>,
     managed_agent: Mutex<Option<ManagedAgentProcess>>,
+    /// Último sessionId passado a um start bem-sucedido gerenciado pelo shell (020 / FR-005).
+    last_managed_session_id: Mutex<Option<String>>,
     /// Diretório de config do app (prefs do Assistente).
     config_dir: PathBuf,
 }
@@ -105,17 +109,22 @@ fn get_transcript_feed(state: State<AppState>, session_id: String) -> Vec<Transc
 fn get_agent_status(state: State<AppState>) -> AgentStatus {
     let running = agent_control::detect_running();
     let has_handle = state.managed_agent.lock().unwrap().is_some();
-    AgentStatus {
+    // Se o processo morreu fora do shell, limpa handle órfão.
+    let has_handle = if has_handle && !running {
+        *state.managed_agent.lock().unwrap() = None;
+        *state.last_managed_session_id.lock().unwrap() = None;
+        false
+    } else {
+        has_handle
+    };
+    let last_managed = state.last_managed_session_id.lock().unwrap().clone();
+    agent_control::build_status(
         running,
-        control_mode: if has_handle {
-            ControlMode::Direct
-        } else {
-            ControlMode::Guided
-        },
-        guidance_command: String::new(), // preenchido pelo chamador (session_id/perfil só são
-        // conhecidos no frontend); ver agent_control::guidance_command
-        last_error: None,
-    }
+        has_handle,
+        last_managed.as_deref(),
+        String::new(), // guidance preenchido no webview com sessão ativa (T016)
+        None,
+    )
 }
 
 #[tauri::command]
@@ -135,11 +144,14 @@ fn start_agent(
     match agent_control::start(command) {
         Ok(managed) => {
             *state.managed_agent.lock().unwrap() = Some(managed);
+            *state.last_managed_session_id.lock().unwrap() = Some(session_id.clone());
             Ok(AgentStatus {
                 running: true,
                 control_mode: ControlMode::Direct,
                 guidance_command: agent_control::guidance_command(&session_id, &profile_path),
                 last_error: None,
+                agent_session_id: Some(session_id),
+                agent_session_source: AgentSessionSource::Managed,
             })
         }
         Err(err) => Err(err.to_string()),
@@ -153,6 +165,7 @@ fn stop_agent(state: State<AppState>) -> Result<(), String> {
         Some(managed) => agent_control::stop(managed)
             .map(|_| {
                 *guard = None;
+                *state.last_managed_session_id.lock().unwrap() = None;
             })
             .map_err(|e| e.to_string()),
         None => Err(
@@ -261,6 +274,7 @@ fn main() {
             app.manage(AppState {
                 config: Mutex::new(loaded),
                 managed_agent: Mutex::new(None),
+                last_managed_session_id: Mutex::new(None),
                 config_dir,
             });
             Ok(())

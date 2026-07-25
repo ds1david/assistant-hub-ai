@@ -27,6 +27,28 @@ describe("renderAssistantPanel", () => {
     expect(container.querySelector('[data-testid="assistant-input-mode"]')).toBeTruthy();
   });
 
+  it("renders distinct empty kinds via data-empty-kind (FR-010)", () => {
+    const kinds = [
+      "session_mismatch",
+      "prefs_auto_off",
+      "prefs_no_origin",
+      "awaiting_transcript",
+      "awaiting_final",
+      "no_eligible_question",
+    ] as const;
+    for (const kind of kinds) {
+      const container = document.createElement("div");
+      renderAssistantPanel(
+        container,
+        { ...emptyView, emptyKind: kind },
+        callbacks(),
+      );
+      const el = container.querySelector('[data-testid="assistant-empty"]');
+      expect(el?.getAttribute("data-empty-kind")).toBe(kind);
+      expect(el?.textContent?.length).toBeGreaterThan(10);
+    }
+  });
+
   it("renders conflict actions and wires cancel/wait", () => {
     const container = document.createElement("div");
     const cbs = callbacks();
