@@ -3,6 +3,9 @@
 Guia de build/instalação reproduzível do shell (`apps/desktop-shell/`) na máquina Windows de
 referência. Cobre FR-011/SC-004 de `specs/014-issue-35-desktop-tauri-shell-local/spec.md`.
 
+Para subir o **stack completo** (STT, session-core, agent) junto com o shell, veja
+[docs/development/running.md](../development/running.md).
+
 **Importante**: o núcleo Tauri (`apps/desktop-shell/src-tauri/`, binário `desktop-shell`, feature
 Cargo `gui`) depende de WebView2 e só é buildado/executado de verdade na máquina Windows de
 referência — não compila em WSL/Linux sem uma stack GTK/WebKit completa (ver

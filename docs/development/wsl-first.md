@@ -66,6 +66,12 @@ WHISPER_DEVICE=cuda
 WHISPER_COMPUTE_TYPE=float16
 ```
 
+## Como rodar o stack completo
+
+Guia operacional (pós-reboot, session-core, agent, shell, troubleshooting):
+
+- **[running.md](running.md)**
+
 ## Fluxo diário automatizado
 
 No PowerShell do Windows:

@@ -14,6 +14,8 @@ Falta de host Windows, GPU ou WebView2 é **bloqueio de ambiente** — não decl
 
 Entrada: [README.md](../../README.md) → esta página.
 
+Operação diária / pós-reboot (scripts, health checks, armadilhas): [docs/development/running.md](../development/running.md).
+
 ---
 
 ## Fronteira WSL vs Windows

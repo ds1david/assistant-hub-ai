@@ -40,6 +40,12 @@ Construir uma plataforma local-first, modular e extensível para captura, transc
 - mudanças de contrato exigem ADR/spec/testes;
 - execute testes do módulo alterado.
 
+## Como rodar o stack
+
+Operação pós-reboot e dia a dia (STT, session-core, agent, shell):
+
+- `docs/development/running.md`
+
 ## Comandos WSL
 
 ```bash
@@ -48,6 +54,8 @@ mvn test
 python3 -m compileall services/transcription-service/app
 python3 -m compileall agents/windows-audio-agent/src
 PYTHONPATH=services/transcription-service pytest -q services/transcription-service/tests
+./scripts/wsl/start-assistant-hub.sh --no-build
+./scripts/wsl/start-session-core.sh --seed-example
 ```
 
 ## Comandos Windows

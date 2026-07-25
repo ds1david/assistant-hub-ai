@@ -110,6 +110,20 @@ Altere `.env` e recrie os containers:
 ./scripts/wsl/start-assistant-hub.sh
 ```
 
+## Como rodar (pós-reboot e dia a dia)
+
+Guia completo (STT + session-core + agent + shell, checklist e troubleshooting):
+
+- **[docs/development/running.md](docs/development/running.md)**
+
+Resumo após reiniciar o Windows:
+
+1. Abrir o **Docker Desktop**.
+2. WSL: `./scripts/wsl/start-assistant-hub.sh --no-build`
+3. WSL (outro terminal): `./scripts/wsl/start-session-core.sh --seed-example`
+4. Agent Windows (se não abriu sozinho): `scripts/windows/run-audio-agent-foreground.ps1` com `-Session` / `-Profile`
+5. Shell desktop (opcional): em `C:\src\...\apps\desktop-shell` → `cargo tauri dev --features gui`
+
 ## Inicialização principal — a partir do WSL
 
 Execute dentro do Ubuntu:
@@ -218,14 +232,15 @@ Depois execute novamente o start; trocar o modelo não exige rebuild da imagem, 
 
 ```text
 samples/audio-profiles/default.yaml
-samples/audio-profiles/conference-cam.yaml
+samples/audio-profiles/conference-cam-endpointid.yaml   # conference cam — preferir (endpointId)
+samples/audio-profiles/conference-cam.yaml              # nameRegex (pode ser ambíguo)
 samples/audio-profiles/bluetooth-output-usb-mic.yaml
 ```
 
 Validação no PowerShell Windows:
 
 ```powershell
-assistant-hub-audio probe --profile "\\wsl.localhost\Ubuntu-24.04\home\david\workspace\assistant-hub-ai\samples\audio-profiles\default.yaml"
+assistant-hub-audio probe --profile "\\wsl.localhost\Ubuntu-24.04\home\david\workspace\assistant-hub-ai\samples\audio-profiles\conference-cam-endpointid.yaml"
 ```
 
 ## Fluxo mínimo (release)
