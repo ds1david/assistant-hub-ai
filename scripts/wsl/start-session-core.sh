@@ -153,6 +153,9 @@ echo
 
 run_mvn() {
   # -Dspring-boot.run.arguments não é necessário: SERVER_PORT já exportado.
+  # Prefixo spring-boot resolvido via parent pluginManagement (ver pom.xml raiz).
+  # -am recompila plugin-sdk-java; skip=true no parent evita "no main class" nos
+  # módulos pom/SDK; session-core tem skip=false + workingDirectory = raiz do monorepo.
   mvn -pl services/session-core -am spring-boot:run -DskipTests
 }
 

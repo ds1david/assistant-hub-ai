@@ -52,6 +52,21 @@
             <useModulePath>false</useModulePath>
           </configuration>
         </plugin>
+        <!--
+          Declared here so `mvn -pl services/session-core -am spring-boot:run` from the
+          monorepo root can resolve the spring-boot plugin prefix (Maven only looks
+          at the root POM + default plugin groups for prefix mapping).
+          skip=true by default so -am does not try to run the app on parent/SDK modules;
+          session-core overrides skip=false.
+        -->
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+          <configuration>
+            <skip>true</skip>
+          </configuration>
+        </plugin>
       </plugins>
     </pluginManagement>
   </build>
