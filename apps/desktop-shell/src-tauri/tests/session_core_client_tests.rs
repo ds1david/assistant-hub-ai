@@ -55,6 +55,7 @@ fn handle_connection(
 
     let status_text = match status {
         200 => "200 OK",
+        201 => "201 Created",
         404 => "404 Not Found",
         503 => "503 Service Unavailable",
         _ => "500 Internal Server Error",
@@ -185,4 +186,46 @@ fn transcript_feed_entries_over_http_preserves_order_and_channel_identity() {
     assert_eq!(feed[0].text, "ola do microfone");
     assert_eq!(feed[1].channel_id.as_deref(), Some("sys-1"));
     assert_eq!(feed[1].text, "ola do sistema");
+}
+
+#[test]
+fn list_sessions_returns_array() {
+    let mut routes = HashMap::new();
+    routes.insert(
+        ("GET", "/api/sessions"),
+        (200, format!("[{SESSION_JSON}]")),
+    );
+    let base_url = start_fake_server(routes);
+    let client = SessionCoreClient::new(base_url);
+
+    let sessions = client.list_sessions().expect("list_sessions");
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].title, "quickstart");
+}
+
+#[test]
+fn list_sessions_empty_ok() {
+    let mut routes = HashMap::new();
+    routes.insert(("GET", "/api/sessions"), (200, "[]".to_string()));
+    let base_url = start_fake_server(routes);
+    let client = SessionCoreClient::new(base_url);
+
+    let sessions = client.list_sessions().expect("list empty");
+    assert!(sessions.is_empty());
+}
+
+#[test]
+fn create_session_posts_and_returns_body() {
+    let mut routes = HashMap::new();
+    routes.insert(
+        ("POST", "/api/sessions"),
+        (201, SESSION_JSON.to_string()),
+    );
+    let base_url = start_fake_server(routes);
+    let client = SessionCoreClient::new(base_url);
+
+    let session = client
+        .create_session("Sessão local", "interview-technical")
+        .expect("create_session");
+    assert_eq!(session.id, "11111111-1111-1111-1111-111111111111");
 }

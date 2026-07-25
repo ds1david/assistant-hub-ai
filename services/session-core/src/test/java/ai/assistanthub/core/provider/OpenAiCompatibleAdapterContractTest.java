@@ -98,6 +98,26 @@ class OpenAiCompatibleAdapterContractTest {
     }
 
     @Test
+    void testConnectionIncludesPublicErrorDetailAndRedactsApiKeyMaterial() throws IOException {
+        String body = """
+                {"code":"permission-denied","error":"The API key xai-ABCDEFGHijklmnop is disabled"}
+                """;
+        String baseUrl = startServer(403, body, new AtomicReference<>());
+        OpenAiCompatibleAdapter adapter = new OpenAiCompatibleAdapter(
+                new ObjectMapper(), secretRef -> Optional.empty());
+
+        ConnectionTestResult result = adapter.testConnection(
+                provider(baseUrl, new ProviderAuthentication(AuthenticationMode.NONE, null, null)));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorType()).isEqualTo(InvocationErrorType.AUTHENTICATION);
+        assertThat(result.message()).contains("HTTP 403");
+        assertThat(result.message()).contains("disabled");
+        assertThat(result.message()).contains("xai-[REDACTED]");
+        assertThat(result.message()).doesNotContain("ABCDEFGHijklmnop");
+    }
+
+    @Test
     void classifiesModelNotFound() throws IOException {
         String baseUrl = startServer(404, "{}", new AtomicReference<>());
         OpenAiCompatibleAdapter adapter = new OpenAiCompatibleAdapter(

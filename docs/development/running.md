@@ -129,7 +129,7 @@ Listar devices (venv do agent):
 
 ### 4. Desktop shell (opcional)
 
-O shell **não** empacota STT nem o agent. Só a UI (sessão, agent, provedores).
+O shell **não** empacota STT nem o agent. Só a UI (sessão, agent, provedores, **Assistente automático**).
 
 Use clone em **disco Windows** (letra de unidade). Caminho UNC (`\\wsl.localhost\...`) quebra `npm`/`cmd`.
 
@@ -143,9 +143,17 @@ cargo tauri dev --features gui
 
 Instalador: `cargo tauri build --features gui` — artefatos em `src-tauri\target\release\bundle\nsis\` e `msi\`. Detalhes: [packaging.md](../desktop-shell/packaging.md).
 
-**Verificação:** janela abre; agent “ativo” se o processo `assistant-hub-audio` estiver rodando; salvar provedor **sem** HTTP 500.
+**Sessão e Assistente (feature live-answer):**
 
-Config local: `%APPDATA%\ai.assistanthub.desktopshell\shell-config.json` (`sessionCoreBaseUrl`, padrão `http://localhost:8080`).
+1. No shell, **liste / crie / selecione** a sessão (não há auto-create silencioso). Criar usa defaults `title=Sessão local` e `profileId=interview-technical`.
+2. Anote o **id da sessão ativa** na UI e use o **mesmo** `-Session <id>` no agent WASAPI.
+3. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota de invoke: `live-answer` / capability `chat`.
+4. Com automático ligado e pergunta final no canal habilitado, a resposta aparece no painel (conflito cancelar/aguardar se chegar outra pergunta durante geração).
+5. Preferências do Assistente ficam em `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
+
+**Verificação:** janela abre; lista de sessões via `GET /api/sessions`; agent “ativo” se o processo `assistant-hub-audio` estiver rodando; salvar provedor **sem** HTTP 500; painel de provedores (`list`/`test`) continua utilizável com o Assistente.
+
+Config local: `%APPDATA%\ai.assistanthub.desktopshell\shell-config.json` (`sessionCoreBaseUrl`, padrão `http://localhost:8080`). Sample de rota `live-answer`: `samples/ai-providers/providers.example.yaml` (seed em `config/ai-providers.yaml` se o hub copiar o sample).
 
 ---
 

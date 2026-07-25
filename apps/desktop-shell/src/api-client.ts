@@ -67,6 +67,16 @@ export function getSessionStatus(sessionId: string): Promise<SessionStatusRespon
   return invoke("get_session_status", { sessionId });
 }
 
+/** Cria sessão no session-core — id deve ser o mesmo usado pelo agent WASAPI. */
+export function createSession(title: string, profileId: string): Promise<SessionSummary> {
+  return invoke("create_session", { title, profileId });
+}
+
+/** Lista sessões conhecidas (`GET /api/sessions`, FR-026). */
+export function listSessions(): Promise<SessionSummary[]> {
+  return invoke("list_sessions");
+}
+
 export function getTranscriptFeed(sessionId: string): Promise<TranscriptFeedEntry[]> {
   return invoke("get_transcript_feed", { sessionId });
 }
