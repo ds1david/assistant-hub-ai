@@ -33,7 +33,7 @@ Not a new domain feature slice.
 
 | ID | Tracking |
 |----|----------|
-| `InvocationResult-sourceType` | [#40](https://github.com/ds1david/assistant-hub-ai/issues/40) |
+| `InvocationResult-sourceType` | [#40](https://github.com/ds1david/assistant-hub-ai/issues/40) — **resolved on branch `feature/issue-40-debt-invocationresult-sourcetype-consistency` / spec `017`** (server-resolved `sourceType` on invoke result + tests; close issue after merge) |
 | `frontend-vite-audit` | [#41](https://github.com/ds1david/assistant-hub-ai/issues/41) — **no Vite major bump in this tag** |
 
 ### Release process
