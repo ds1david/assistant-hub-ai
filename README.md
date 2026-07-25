@@ -175,6 +175,19 @@ Use o wrapper para garantir o carregamento correto do `.env`:
 
 Evite chamar diretamente `docker compose -f infra/compose/...`, pois nesse formato o Compose pode procurar o `.env` no diretório dos arquivos Compose em vez da raiz do repositório.
 
+## session-core (Memory Hub + AI Provider Hub)
+
+O shell desktop e o hub de provedores usam `http://localhost:8080` por padrão. Suba a partir da **raiz do monorepo** (CWD importa para `data/session-core/` e `config/`):
+
+```bash
+./scripts/wsl/start-session-core.sh
+# se :8080 estiver com outro app (ex.: number-generator), o script aborta com pid/cmd
+./scripts/wsl/start-session-core.sh --seed-example --background
+./scripts/wsl/stop-session-core.sh
+```
+
+Health: `http://localhost:8080/actuator/health` · API: `http://localhost:8080/api/ai-providers`
+
 ## Dashboard e health check
 
 ```text

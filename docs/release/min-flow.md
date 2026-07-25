@@ -51,12 +51,17 @@ chmod +x scripts/bootstrap-wsl-ubuntu.sh scripts/wsl/*.sh
 `session-core` (Memory Hub / API de sessão):
 
 ```bash
-# a partir da raiz do monorepo (CWD importa para data/session-core/)
+# Preferido: falha cedo se :8080 já estiver ocupada por outro app (ex.: number-generator)
+./scripts/wsl/start-session-core.sh
+# opcional: copiar samples/ai-providers e rodar em background
+./scripts/wsl/start-session-core.sh --seed-example --background
+./scripts/wsl/stop-session-core.sh
+
+# equivalente manual (CWD = raiz do monorepo — importa para data/session-core/)
 mvn -pl services/session-core -am spring-boot:run
-# ou o comando de start documentado no módulo, se preferir jar
 ```
 
-Porta padrão típica do `session-core`: `http://localhost:8080` (confirme em `services/session-core` / config).
+Porta padrão típica do `session-core`: `http://localhost:8080` (confirme em `services/session-core` / config). Se a 8080 estiver tomada, use `--port 8081` e ajuste `sessionCoreBaseUrl` no shell desktop.
 
 ### Critério “no ar”
 
