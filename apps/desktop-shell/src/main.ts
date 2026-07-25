@@ -125,14 +125,14 @@ function updateAssistantGuards(): void {
   assistantController.setControlsDisabled(false, null);
 }
 
+/** Só renderiza o painel — não reaplica guards (evita loop setControlsDisabled → onChange → paint). */
 function paintAssistant(): void {
-  updateAssistantGuards();
   renderAssistantPanel(assistantPanelContainer(), assistantController.getView(), {
     onToggleEnabled: (enabled) => {
       const prefs = { ...currentPrefsFromController(), autoEnabled: enabled };
       assistantController.setPrefs(prefs);
       void persistPrefs(prefs);
-      paintAssistant();
+      // setPrefs já emite → onChange → paintAssistant
     },
     onToggleOrigin: (origin: CanonicalSourceType, enabled: boolean) => {
       const current = currentPrefsFromController();
@@ -148,17 +148,15 @@ function paintAssistant(): void {
       };
       assistantController.setPrefs(prefs);
       void persistPrefs(prefs);
-      paintAssistant();
     },
     onInputModeChange: (mode: InputMode) => {
       const prefs = { ...currentPrefsFromController(), inputMode: mode };
       assistantController.setPrefs(prefs);
       void persistPrefs(prefs);
-      paintAssistant();
     },
     onResolveConflict: (choice) => {
       assistantController.resolveConflict(choice);
-      paintAssistant();
+      // resolveConflict emite → onChange → paintAssistant
     },
   });
 }
@@ -205,6 +203,7 @@ export async function selectSession(sessionId: string): Promise<void> {
   }
   updateAssistantGuards();
   paintSessionPicker();
+  // updateAssistantGuards emite se o estado mudou; paint cobre o caso sem mudança.
   paintAssistant();
   void pollSessionStatus();
   void pollTranscriptFeed();
@@ -410,6 +409,8 @@ export function setActiveSession(sessionId: string): void {
 }
 
 function bootstrap(): void {
+  // Guards primeiro (sem sessão → controles desabilitados); paint se emit for no-op.
+  updateAssistantGuards();
   paintAssistant();
   paintSessionPicker();
   void refreshSessionList().then(() => {

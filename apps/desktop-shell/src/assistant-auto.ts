@@ -279,6 +279,10 @@ export class AssistantAutoController {
   }
 
   setControlsDisabled(disabled: boolean, hint: string | null = null): void {
+    // Idempotente: paintAssistant/onChange pode reaplicar os guards sem reentrar em emit.
+    if (this.controlsDisabled === disabled && this.sessionHint === hint) {
+      return;
+    }
     this.controlsDisabled = disabled;
     this.sessionHint = hint;
     this.emit();

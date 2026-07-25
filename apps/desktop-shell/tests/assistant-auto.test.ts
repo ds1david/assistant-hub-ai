@@ -203,6 +203,27 @@ describe("AssistantAutoController", () => {
     expect(controller.getView().turns).toHaveLength(0);
   });
 
+  it("setControlsDisabled is idempotent (no re-emit / no paint loop)", () => {
+    const invoke = vi.fn();
+    const controller = new AssistantAutoController({ invoke });
+    const onChange = vi.fn();
+    controller.setOnChange(onChange);
+
+    controller.setControlsDisabled(true, "sem sessão");
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(controller.getView().controlsDisabled).toBe(true);
+    expect(controller.getView().sessionHint).toBe("sem sessão");
+
+    // Reaplicar o mesmo estado não deve emitir (evita stack overflow no shell).
+    controller.setControlsDisabled(true, "sem sessão");
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    controller.setControlsDisabled(false, null);
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(controller.getView().controlsDisabled).toBe(false);
+    expect(controller.getView().sessionHint).toBeNull();
+  });
+
   it("asks for conflict when a second question arrives while busy", async () => {
     let resolveFirst!: (value: InvocationResult) => void;
     const first = new Promise<InvocationResult>((resolve) => {
