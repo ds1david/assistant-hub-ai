@@ -2,6 +2,7 @@
 import type { AssistantAutoView, AssistantTurn, ConflictChoice } from "./assistant-auto";
 import type { CanonicalSourceType, InputMode } from "./assistant-prefs";
 import { escapeHtml } from "./dom-utils";
+import { emptyKindCopy, type AssistantEmptyKind } from "./session-alignment";
 
 export interface AssistantPanelCallbacks {
   onToggleEnabled: (enabled: boolean) => void;
@@ -70,7 +71,7 @@ export function renderAssistantPanel(
         </label>
       </div>
       ${view.conflict ? renderConflict(view) : ""}
-      ${renderTurns(view.turns)}
+      ${renderTurns(view.turns, view.emptyKind ?? null)}
     </section>
   `;
 
@@ -157,11 +158,11 @@ function renderConflict(view: AssistantAutoView): string {
   `;
 }
 
-function renderTurns(turns: AssistantTurn[]): string {
+function renderTurns(turns: AssistantTurn[], emptyKind: AssistantEmptyKind | null): string {
   if (turns.length === 0) {
-    return `<p class="assistant-empty" data-testid="assistant-empty">
-      Nenhuma interação ainda. Com o automático ligado e uma sessão ativa, perguntas finais
-      no transcript (origem habilitada) disparam a rota <code>live-answer</code>.
+    const kind: AssistantEmptyKind = emptyKind ?? "generic";
+    return `<p class="assistant-empty" data-testid="assistant-empty" data-empty-kind="${kind}">
+      ${escapeHtml(emptyKindCopy(kind))}
     </p>`;
   }
   // Mais recente primeiro (FR-029)

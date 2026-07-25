@@ -51,11 +51,16 @@ export interface TranscriptFeedEntry {
 
 export type ControlMode = "Direct" | "Guided";
 
+export type AgentSessionSource = "cmdline" | "managed" | "unknown";
+
 export interface AgentStatus {
   running: boolean;
   controlMode: ControlMode;
   guidanceCommand: string;
   lastError: string | null;
+  /** Sessão resolvida do agent (cmdline → managed → null). */
+  agentSessionId: string | null;
+  agentSessionSource: AgentSessionSource;
 }
 
 export interface ShellConfig {

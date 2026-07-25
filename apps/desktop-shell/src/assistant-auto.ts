@@ -9,6 +9,7 @@ import {
   type CanonicalSourceType,
   type InputMode,
 } from "./assistant-prefs";
+import type { AssistantEmptyKind } from "./session-alignment";
 
 export type AssistantTurnStatus = "running" | "done" | "error" | "cancelled" | "queued";
 
@@ -46,6 +47,8 @@ export interface AssistantAutoView {
   /** Controles desabilitados (sem sessão / core down). */
   controlsDisabled?: boolean;
   sessionHint?: string | null;
+  /** Estado vazio do painel (FR-010); null se há turns ou não computado. */
+  emptyKind?: AssistantEmptyKind | null;
 }
 
 export type ConflictChoice = "cancel" | "wait";
