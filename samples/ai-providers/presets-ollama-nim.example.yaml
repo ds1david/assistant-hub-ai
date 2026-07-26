@@ -1,0 +1,47 @@
+# Presets de exemplo — Ollama local e NVIDIA NIM (hosted).
+# Copie para config/ai-providers.yaml (gitignored) e ajuste secretRef.
+# Nunca coloque chaves em claro neste arquivo.
+#
+# Ver: docs/security/provider-secrets.md · specs/027-r6-model-discovery-metrics/
+
+version: 1
+
+providers:
+  - id: ollama-local
+    label: Ollama local
+    type: openai-compatible
+    enabled: true
+    baseUrl: http://127.0.0.1:11434/v1
+    authentication:
+      mode: none
+    defaults:
+      model: qwen3:8b
+      temperature: 0.2
+      maxTokens: 1024
+      timeoutMs: 60000
+    capabilities:
+      - chat
+      - streaming
+
+  - id: nvidia-nim-hosted
+    label: NVIDIA NIM (hosted)
+    type: openai-compatible
+    enabled: false
+    baseUrl: https://integrate.api.nvidia.com/v1
+    authentication:
+      mode: bearer
+      secretRef: env:NVIDIA_API_KEY
+    defaults:
+      model: nvidia/llama-3.1-nemotron-nano-8b-v1
+      temperature: 0.2
+      maxTokens: 2048
+      timeoutMs: 45000
+    capabilities:
+      - chat
+      - streaming
+
+routes:
+  chat:
+    primary: ollama-local
+    fallbacks:
+      - nvidia-nim-hosted

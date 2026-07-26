@@ -3,6 +3,7 @@ package ai.assistanthub.core.provider;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -38,9 +39,29 @@ public class FakeProviderAdapter implements ProviderAdapterFactory.TypedProvider
             sleepUntilInterrupted();
         }
         InvocationErrorType errorType = mode.errorType();
-        return errorType == null
-                ? AdapterOutcome.success("[fake:" + provider.id() + "] " + request.input())
-                : AdapterOutcome.failure(errorType, mode.message());
+        if (errorType != null) {
+            return AdapterOutcome.failure(errorType, mode.message());
+        }
+        String output = "[fake:" + provider.id() + "] " + request.input();
+        // usage determinístico para testes de métricas (027) — não inventa em falha
+        int prompt = Math.max(1, request.input() == null ? 1 : request.input().length());
+        int completion = Math.max(1, output.length());
+        return AdapterOutcome.success(output, prompt, completion, prompt + completion);
+    }
+
+    @Override
+    public ModelsDiscoveryResult listModels(Provider provider) {
+        FakeMode mode = FakeMode.fromBaseUrl(provider.baseUrl());
+        if (mode == FakeMode.HANG) {
+            sleepUntilInterrupted();
+        }
+        InvocationErrorType errorType = mode.errorType();
+        if (errorType != null) {
+            return ModelsDiscoveryResult.failure(provider.id(), errorType, mode.message());
+        }
+        return ModelsDiscoveryResult.ok(provider.id(), List.of(
+                new ModelInfo("fake-model", "fake"),
+                new ModelInfo(provider.defaults().model() != null ? provider.defaults().model() : "fake-default", "fake")));
     }
 
     @Override

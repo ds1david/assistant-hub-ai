@@ -160,7 +160,8 @@ export type InvocationErrorType =
   | "TIMEOUT"
   | "RATE_LIMITED"
   | "GENERIC"
-  | "CAPABILITY_MISMATCH";
+  | "CAPABILITY_MISMATCH"
+  | "CIRCUIT_OPEN";
 
 export interface ConnectionTestResult {
   providerId: string;
@@ -183,6 +184,23 @@ export interface InvocationResult {
   message?: string | null;
   latencyMs: number;
   occurredAt: string;
+  /** 027 — only when provider reports usage; never invented. */
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+}
+
+export interface ModelInfo {
+  id: string;
+  ownedBy?: string | null;
+}
+
+export interface ModelsDiscoveryResult {
+  providerId: string;
+  success: boolean;
+  errorType?: InvocationErrorType | null;
+  message?: string | null;
+  models: ModelInfo[];
 }
 
 export interface SecretPreview {

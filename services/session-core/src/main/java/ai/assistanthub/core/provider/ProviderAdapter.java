@@ -15,6 +15,16 @@ public interface ProviderAdapter {
     AdapterOutcome invoke(Provider provider, InvocationRequest request);
 
     /**
+     * Descoberta de modelos (027). Default: não suportado.
+     */
+    default ModelsDiscoveryResult listModels(Provider provider) {
+        return ModelsDiscoveryResult.failure(
+                provider.id(),
+                InvocationErrorType.GENERIC,
+                "descoberta de modelos não suportada para type " + provider.type().wireValue());
+    }
+
+    /**
      * Invocação em streaming (026). Default: uma chamada síncrona e um único chunk com o output.
      * {@code cancelled} true interrompe o envio de novos chunks (best-effort).
      */
