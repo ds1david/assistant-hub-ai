@@ -114,14 +114,9 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
         "reuniao comeca as dez",
         "reuniao comeca as dez",
         "fala local diferente agora",
-        # Duas janelas cheias no mic deixam exatamente 2x overlap_seconds
-        # (== min_audio_seconds nestas settings) no buffer, o que já basta
-        # para o flush() do disconnect emitir uma janela final. Sem este
-        # 4o script, o fake engine cai no texto default e essa janela é
-        # contada como uma nova amostra (racy: só se manifesta quando o
-        # to_thread do flush termina antes do GET de metrics). Repetir o
-        # último texto garante que o transcriber a descarte por dedupe
-        # (StreamingTranscriber.transcribe_pcm) de forma determinística.
+        # Residual flush after two full windows may re-transcribe overlap/min audio.
+        # Repeat last text so StreamingTranscriber.transcribe_pcm dedupes deterministically
+        # (avoids default fake-engine text counting as an extra sample).
         "fala local diferente agora",
     )
     with client.websocket_connect(
@@ -137,12 +132,16 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
             # pelo worker (FIFO) quando o GET abaixo roda.
             mic_ws.send_bytes(WINDOW)
             mic_ws.send_bytes(WINDOW)
-            assert mic_ws.receive_json()["text"] == "fala local diferente agora"
+            event = mic_ws.receive_json()
+            assert event["text"] == "fala local diferente agora"
+            assert event["type"] == "transcript.partial.v2"
 
+    # finally{} awaits worker join before context exit — metrics see complete disconnect.
     channels = get_metrics(client, "sess-echo")["channels"]
     assert [channel["channelId"] for channel in channels] == ["mic-1", "system-main"]
     mic, system = channels
-    # Mic: 1 partial (local) + 1 disconnect final; suppressed echo not counted.
+    # Mic: 1 partial (local) + 1 disconnect/idle final; suppressed echo not counted.
+    # Without suppress we would see ≥2 partials (+ final) → totalEvents ≥ 3.
     assert mic["sampleCount"] == 2
     assert mic["totalEvents"] == 2
     # System: partial + disconnect final
