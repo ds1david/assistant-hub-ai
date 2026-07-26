@@ -84,7 +84,7 @@ Estado real no monorepo vs visão R3–R6. Epic: [#63](https://github.com/ds1dav
 | Ordem | Issue | Fatia | Release |
 |------:|-------|--------|---------|
 | 1 | [#64](https://github.com/ds1david/assistant-hub-ai/issues/64) | Secure credential store (Windows DPAPI / OS keyring) | 002 + 003 |
-| 2 | [#65](https://github.com/ds1david/assistant-hub-ai/issues/65) | Memory Hub R3.2 — busca, decisões, referências | R3 |
+| 2 | [#65](https://github.com/ds1david/assistant-hub-ai/issues/65) | Memory Hub R3.2 — busca, decisões, referências | R3 | **P0 done (030)** |
 | 3 | [#66](https://github.com/ds1david/assistant-hub-ai/issues/66) | Release hardening — checksums, CI packaging, install | 002 / R5 |
 | 4 | [#67](https://github.com/ds1david/assistant-hub-ai/issues/67) | Painel de diagnóstico unificado | 002 / R5 |
 | 5 | [#68](https://github.com/ds1david/assistant-hub-ai/issues/68) | Visual Context (spec first) | R4 |
@@ -99,5 +99,8 @@ Estado real no monorepo vs visão R3–R6. Epic: [#63](https://github.com/ds1dav
 | Live-answer entrevista | #61 / 028 |
 
 ### Próximo a implementar
+
+- **#65 P0** entregue em `specs/030-issue-65-r3-memory-intelligence/` (busca + heurística + painel Memory). P1 embeddings/cite ainda abertos.
+
 
 Começar por **#64** (desbloqueia 002 e 003 de uma vez), depois #65…#68 na ordem da tabela.
