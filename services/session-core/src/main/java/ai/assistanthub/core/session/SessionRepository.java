@@ -56,10 +56,12 @@ public class SessionRepository {
 
     public void append(HubEvent event) {
         List<HubEvent> sessionEvents = events.computeIfAbsent(event.sessionId(), ignored -> newEventList());
+        // Memória + persistência sob o mesmo monitor da sessão: evita corrida no ArrayList e
+        // inserts SQLite concorrentes na mesma sessão (busy/UNIQUE sob carga multi-canal).
         synchronized (sessionEvents) {
             sessionEvents.add(event);
+            persistenceStore.appendEvent(event);
         }
-        persistenceStore.appendEvent(event);
     }
 
     public List<HubEvent> events(UUID sessionId) {

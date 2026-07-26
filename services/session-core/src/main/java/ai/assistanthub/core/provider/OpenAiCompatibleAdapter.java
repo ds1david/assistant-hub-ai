@@ -67,7 +67,8 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
         try {
             Map<String, Object> body = Map.of(
                     "model", provider.defaults().model(),
-                    "messages", List.of(Map.of("role", "user", "content", request.input())));
+                    "messages", List.of(Map.of("role", "user", "content", request.input())),
+                    "stream", false);
             HttpRequest httpRequest = requestBuilder(provider, "/chat/completions", provider.defaults().timeoutMs())
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
                     .build();
@@ -85,6 +86,82 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
                 Thread.currentThread().interrupt();
             }
             return AdapterOutcome.failure(InvocationErrorType.GENERIC, describe(e));
+        }
+    }
+
+    @Override
+    public AdapterOutcome invokeStream(
+            Provider provider,
+            InvocationRequest request,
+            StreamChunkListener listener,
+            java.util.function.BooleanSupplier cancelled) {
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", provider.defaults().model(),
+                    "messages", List.of(Map.of("role", "user", "content", request.input())),
+                    "stream", true);
+            HttpRequest httpRequest = requestBuilder(provider, "/chat/completions", provider.defaults().timeoutMs())
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                    .header("Accept", "text/event-stream")
+                    .build();
+            HttpResponse<java.io.InputStream> response =
+                    httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+
+            InvocationErrorType errorType = classify(response.statusCode());
+            if (errorType != null) {
+                String bodyText = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                return AdapterOutcome.failure(errorType, httpFailureMessage(response.statusCode(), bodyText));
+            }
+
+            StringBuilder assembled = new StringBuilder();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(response.body(), java.nio.charset.StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                        return AdapterOutcome.failure(InvocationErrorType.GENERIC, "invocação cancelada");
+                    }
+                    if (!line.startsWith("data:")) {
+                        continue;
+                    }
+                    String data = line.substring(5).trim();
+                    if (data.isEmpty() || "[DONE]".equals(data)) {
+                        if ("[DONE]".equals(data)) {
+                            break;
+                        }
+                        continue;
+                    }
+                    String delta = extractDeltaContent(data);
+                    if (delta != null && !delta.isEmpty()) {
+                        listener.onChunk(delta);
+                        assembled.append(delta);
+                    }
+                }
+            }
+            return AdapterOutcome.success(assembled.toString());
+        } catch (HttpTimeoutException e) {
+            return AdapterOutcome.failure(InvocationErrorType.TIMEOUT, "timeout na invocação stream");
+        } catch (IOException | InterruptedException e) {
+            if (Thread.currentThread().isInterrupted()) {
+                Thread.currentThread().interrupt();
+            }
+            if (cancelled.getAsBoolean()) {
+                return AdapterOutcome.failure(InvocationErrorType.GENERIC, "invocação cancelada");
+            }
+            return AdapterOutcome.failure(InvocationErrorType.GENERIC, describe(e));
+        }
+    }
+
+    private String extractDeltaContent(String jsonLine) {
+        try {
+            JsonNode root = objectMapper.readTree(jsonLine);
+            JsonNode content = root.path("choices").path(0).path("delta").path("content");
+            if (content.isMissingNode() || content.isNull()) {
+                return null;
+            }
+            return content.asText();
+        } catch (IOException e) {
+            return null;
         }
     }
 

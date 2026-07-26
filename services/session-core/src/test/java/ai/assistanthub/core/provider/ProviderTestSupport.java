@@ -68,10 +68,20 @@ public final class ProviderTestSupport {
             ProviderRegistry registry,
             SessionRepository sessionRepository,
             ProviderAdapterFactory.TypedProviderAdapter... adapters) {
+        return newInvocationService(
+                registry, sessionRepository, new ProviderCircuitBreaker(5, 30_000L, java.time.Clock.systemUTC()), adapters);
+    }
+
+    public static InvocationService newInvocationService(
+            ProviderRegistry registry,
+            SessionRepository sessionRepository,
+            ProviderCircuitBreaker circuitBreaker,
+            ProviderAdapterFactory.TypedProviderAdapter... adapters) {
         return new InvocationService(
                 registry,
                 new ProviderAdapterFactory(List.of(adapters)),
-                newOriginResolver(sessionRepository));
+                newOriginResolver(sessionRepository),
+                circuitBreaker);
     }
 
     /**

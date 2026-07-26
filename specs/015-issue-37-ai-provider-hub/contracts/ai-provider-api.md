@@ -15,7 +15,9 @@ Todas as respostas de erro seguem o padrão já usado por `SessionController` (`
 | `DELETE` | `/api/ai-providers/{id}` | — | `204` | `404` id não existe; `409` id referenciado por uma `Route` existente |
 | `GET` | `/api/ai-providers/{id}/secret-preview` | — | `SecretPreview` | `404` id não existe |
 | `POST` | `/api/ai-providers/{id}/test` | — | `200` + `ConnectionTestResult` (FR-011) | `404` id não existe |
-| `POST` | `/api/ai-providers/invoke` | `{ "sessionId": string, "route": string, "capability": string, "input": string }` | `200` + `InvocationResult` (FR-012) | `404` sessão ou rota não existe; `422` capacidade incompatível com o provedor resolvido (FR-010) |
+| `POST` | `/api/ai-providers/invoke` | `{ "sessionId": string, "route": string, "capability": string, "input": string }` | `200` + `InvocationResult` (FR-012); respeita circuit breaker (026) | `404` sessão ou rota não existe; `422` capacidade incompatível / origem de canal; `errorType` pode ser `CIRCUIT_OPEN` |
+| `POST` | `/api/ai-providers/invoke/stream` | mesmo body de invoke | SSE `text/event-stream`: `chunk` / `done` / `error` (026) | mesmos erros de rota/origem; cancel por disconnect |
+| `GET` | `/api/ai-providers/circuit-status` | — | `List<ProviderCircuitSnapshot>` (026) | — |
 
 Toda mutação (`POST`/`PUT`/`PATCH`/`DELETE`) aplica hot-reload no `ProviderRegistry` antes de responder (FR-015) — a resposta já reflete o estado pós-reload.
 
