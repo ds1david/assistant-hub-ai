@@ -74,3 +74,30 @@
 - integrações com calendários, arquivos e sistemas de trabalho;
 - execução distribuída e observabilidade avançada;
 - publicação opcional na Microsoft Store.
+
+---
+
+## Residual backlog (pós-#61, 2026-07-26)
+
+Estado real no monorepo vs visão R3–R6. Epic: [#63](https://github.com/ds1david/assistant-hub-ai/issues/63).
+
+| Ordem | Issue | Fatia | Release |
+|------:|-------|--------|---------|
+| 1 | [#64](https://github.com/ds1david/assistant-hub-ai/issues/64) | Secure credential store (Windows DPAPI / OS keyring) | 002 + 003 |
+| 2 | [#65](https://github.com/ds1david/assistant-hub-ai/issues/65) | Memory Hub R3.2 — busca, decisões, referências | R3 |
+| 3 | [#66](https://github.com/ds1david/assistant-hub-ai/issues/66) | Release hardening — checksums, CI packaging, install | 002 / R5 |
+| 4 | [#67](https://github.com/ds1david/assistant-hub-ai/issues/67) | Painel de diagnóstico unificado | 002 / R5 |
+| 5 | [#68](https://github.com/ds1david/assistant-hub-ai/issues/68) | Visual Context (spec first) | R4 |
+
+### Já entregue (não reabrir como “faltando tudo”)
+
+| Área | Fatias |
+|------|--------|
+| R3.1 persistência | #29 / `specs/013-issue-29-memory-hub-persistence/` |
+| R5 shell + sidecar | #35 / 014, #? / 025 |
+| R6 hub core | #37 / 015, 017, 026, 027 |
+| Live-answer entrevista | #61 / 028 |
+
+### Próximo a implementar
+
+Começar por **#64** (desbloqueia 002 e 003 de uma vez), depois #65…#68 na ordem da tabela.
