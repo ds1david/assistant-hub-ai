@@ -8,7 +8,7 @@ Visão R5 completa. Fatia entregue: `specs/014-issue-35-desktop-tauri-shell-loca
 - [x] Empacotar agente WASAPI como sidecar. (`specs/025-r5-audio-agent-sidecar/` — externalBin + script Windows + resolução runtime; artefato real validado no host Windows)
 - [x] Implementar supervisor de sidecars. (025 — health/versão + shutdown do agent gerenciado; ainda só o audio agent, não STT/JVM)
 - [ ] Criar tela de diagnóstico. (parcial: painéis agent/session/providers no shell; falta diagnóstico mic/GPU/deps unificado) → **[#67](https://github.com/ds1david/assistant-hub-ai/issues/67)**
-- [ ] Implementar armazenamento seguro de credenciais. (ainda `env`/`secretRef`; sem DPAPI/keyring OS) → **[#64](https://github.com/ds1david/assistant-hub-ai/issues/64)**
+- [x] Implementar armazenamento seguro de credenciais. (`os:` + keyring no shell / #64 / specs/029)
 - [x] Gerar instalador NSIS por usuário. (targets em `tauri.conf.json`; build real exige host Windows — validação residual 014 T033)
 - [x] Gerar MSI opcional. (idem)
 - [ ] Criar workflow de release Windows. (parcial: `desktop-shell-smoke` no CI; falta pipeline de artefatos assináveis) → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)**

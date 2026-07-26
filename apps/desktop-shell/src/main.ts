@@ -5,6 +5,8 @@ import {
   deleteAiProvider,
   getAgentStatus,
   getAiProviderSecretPreview,
+  secretStorePut,
+  secretStoreDelete,
   getSessionStatus,
   getTranscriptFeed,
   invokeAiProvider,
@@ -446,10 +448,25 @@ function renderAiProviders(): void {
         void refreshSecretPreview(providerId);
       }
     },
-    onSave: (provider: Provider) => {
+    onSave: (provider: Provider, secretValue?: string | null) => {
       void (async () => {
         try {
-          await saveAiProvider(provider);
+          let toSave = provider;
+          if (secretValue && secretValue.length > 0 && provider.authentication.mode !== "none") {
+            const preferEnv = provider.authentication.secretRef?.startsWith("env:");
+            if (!preferEnv) {
+              const secretRef = await secretStorePut(provider.id, secretValue);
+              toSave = {
+                ...provider,
+                authentication: {
+                  ...provider.authentication,
+                  secretRef,
+                },
+              };
+            }
+            // env: path: operator manages the variable; value field ignored for store.
+          }
+          await saveAiProvider(toSave);
           aiProviderPanelState = { ...aiProviderPanelState, error: null };
           await refreshAiProviderPanel();
         } catch (error) {
@@ -483,6 +500,11 @@ function renderAiProviders(): void {
     onDelete: (providerId) => {
       void (async () => {
         try {
+          try {
+            await secretStoreDelete(providerId);
+          } catch {
+            // store miss is ok
+          }
           await deleteAiProvider(providerId);
           await refreshAiProviderPanel();
         } catch (error) {

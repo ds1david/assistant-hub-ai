@@ -20,7 +20,8 @@ export interface AiProviderPanelState {
 
 export interface AiProviderPanelCallbacks {
   onSelect: (providerId: string | null) => void;
-  onSave: (provider: Provider) => void;
+  /** second arg: optional raw secret to store (os:); never kept in UI state after save */
+  onSave: (provider: Provider, secretValue?: string | null) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
   onTestConnection: (providerId: string) => void;
   onDelete: (providerId: string) => void;
@@ -71,7 +72,8 @@ export function renderAiProviderPanel(
   container.querySelector("[data-testid=\"ai-provider-form\"]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
-    callbacks.onSave(readProviderFromForm(form, selected));
+    const { provider, secretValue } = readProviderFromForm(form, selected);
+    callbacks.onSave(provider, secretValue);
   });
 }
 
@@ -112,39 +114,56 @@ function renderForm(selected: Provider | null): string {
           )
           .join("")}
       </select>
-      <input name="secretRef" placeholder="secretRef (env:VAR)" value="${escapeHtml(selected?.authentication.secretRef ?? "")}" />
+      <input name="secretRef" data-testid="ai-provider-secret-ref"
+        placeholder="secretRef (env:VAR ou os:…)" value="${escapeHtml(selected?.authentication.secretRef ?? "")}" />
+      <input name="secretValue" type="password" data-testid="ai-provider-secret-value"
+        placeholder="colar API key (salva no cofre OS; deixe vazio para manter)" autocomplete="off" value="" />
       <input name="capabilities" placeholder="capacidades (separadas por vírgula)" value="${escapeHtml((selected?.capabilities ?? []).join(","))}" />
       <button type="submit" data-testid="ai-provider-save-button">Salvar</button>
     </form>
   `;
 }
 
-function readProviderFromForm(form: HTMLFormElement, selected: Provider | null): Provider {
+export function readProviderFromForm(
+  form: HTMLFormElement,
+  selected: Provider | null,
+): { provider: Provider; secretValue: string | null } {
   const data = new FormData(form);
   const authMode = String(data.get("authMode") ?? "none") as Provider["authentication"]["mode"];
-  const secretRef = String(data.get("secretRef") ?? "").trim();
+  let secretRef = String(data.get("secretRef") ?? "").trim();
+  const secretValue = String(data.get("secretValue") ?? "").trim();
+  const providerId = String(data.get("id") ?? "").trim();
+  // If user pasted a key, prefer os: ref (store fills on save); keep explicit env: if typed.
+  if (secretValue.length > 0 && authMode !== "none") {
+    if (!secretRef.startsWith("env:")) {
+      secretRef = `os:assistant-hub/providers/${providerId}`;
+    }
+  }
   return {
-    id: String(data.get("id") ?? "").trim(),
-    label: String(data.get("label") ?? "").trim(),
-    type: String(data.get("type") ?? "openai-compatible") as Provider["type"],
-    enabled: selected?.enabled ?? true,
-    baseUrl: String(data.get("baseUrl") ?? "").trim(),
-    authentication: {
-      mode: authMode,
-      secretRef: authMode === "none" || secretRef === "" ? null : secretRef,
-      headerName: selected?.authentication.headerName ?? null,
+    provider: {
+      id: providerId,
+      label: String(data.get("label") ?? "").trim(),
+      type: String(data.get("type") ?? "openai-compatible") as Provider["type"],
+      enabled: selected?.enabled ?? true,
+      baseUrl: String(data.get("baseUrl") ?? "").trim(),
+      authentication: {
+        mode: authMode,
+        secretRef: authMode === "none" || secretRef === "" ? null : secretRef,
+        headerName: selected?.authentication.headerName ?? null,
+      },
+      defaults: {
+        model: String(data.get("model") ?? "").trim(),
+        temperature: selected?.defaults.temperature ?? null,
+        topP: selected?.defaults.topP ?? null,
+        maxTokens: selected?.defaults.maxTokens ?? null,
+        timeoutMs: Number(data.get("timeoutMs") ?? 30000),
+      },
+      capabilities: String(data.get("capabilities") ?? "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0),
     },
-    defaults: {
-      model: String(data.get("model") ?? "").trim(),
-      temperature: selected?.defaults.temperature ?? null,
-      topP: selected?.defaults.topP ?? null,
-      maxTokens: selected?.defaults.maxTokens ?? null,
-      timeoutMs: Number(data.get("timeoutMs") ?? 30000),
-    },
-    capabilities: String(data.get("capabilities") ?? "")
-      .split(",")
-      .map((c) => c.trim())
-      .filter((c) => c.length > 0),
+    secretValue: secretValue.length > 0 ? secretValue : null,
   };
 }
 

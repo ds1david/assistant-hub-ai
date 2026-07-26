@@ -133,7 +133,7 @@ class AiProviderControllerTest {
         AiProviderController local = new AiProviderController(registry, invocationService, secretRef -> java.util.Optional.empty());
 
         assertThatThrownBy(() -> local.invoke(new AiProviderController.InvokeRequest(
-                        session.id().toString(), "mic-1", "chat-route", "chat", "ola")))
+                        session.id().toString(), "mic-1", "chat-route", "chat", "ola", null)))
                 .isInstanceOf(ChannelOriginUnresolvedException.class);
     }
 }

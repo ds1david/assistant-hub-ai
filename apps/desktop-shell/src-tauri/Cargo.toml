@@ -31,5 +31,6 @@ serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 sysinfo = "0.32"
 tauri = { version = "2", optional = true }
+keyring = "3"
 
 [dev-dependencies]
