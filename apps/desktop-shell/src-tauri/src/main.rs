@@ -19,11 +19,12 @@ use desktop_shell::session_core_client::{
     channel_status_views, session_status_view, transcript_feed_entries, ChannelStatusView,
     SessionCoreClient, SessionStatusView, TranscriptFeedEntry,
 };
+use desktop_shell::sidecar::{self, BinaryResolution, BinarySource};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{Manager, RunEvent, State};
 
 struct AppState {
     config: Mutex<ShellConfig>,
@@ -105,25 +106,46 @@ fn get_transcript_feed(state: State<AppState>, session_id: String) -> Vec<Transc
     }
 }
 
+fn resolve_binary_for_state(state: &AppState) -> BinaryResolution {
+    let config = state.config.lock().unwrap();
+    let env_override = std::env::var("ASSISTANT_HUB_AUDIO_BIN").ok();
+    let candidates = sidecar::default_sidecar_candidates(None);
+    sidecar::resolve_with_version(
+        &candidates,
+        env_override.as_deref(),
+        config.audio_agent_bin.as_deref(),
+    )
+}
+
 #[tauri::command]
 fn get_agent_status(state: State<AppState>) -> AgentStatus {
+    let binary = resolve_binary_for_state(&state);
     let running = agent_control::detect_running();
-    let has_handle = state.managed_agent.lock().unwrap().is_some();
-    // Se o processo morreu fora do shell, limpa handle órfão.
-    let has_handle = if has_handle && !running {
-        *state.managed_agent.lock().unwrap() = None;
-        *state.last_managed_session_id.lock().unwrap() = None;
-        false
-    } else {
-        has_handle
-    };
+    let mut managed_guard = state.managed_agent.lock().unwrap();
+    let mut has_handle = managed_guard.is_some();
+    let mut managed_alive = false;
+    if has_handle {
+        if let Some(managed) = managed_guard.as_mut() {
+            managed_alive = agent_control::managed_is_alive(managed);
+        }
+        // Processo morreu (enumeração ou child): limpa handle órfão.
+        if !running || !managed_alive {
+            *managed_guard = None;
+            *state.last_managed_session_id.lock().unwrap() = None;
+            has_handle = false;
+            managed_alive = false;
+        }
+    }
+    drop(managed_guard);
     let last_managed = state.last_managed_session_id.lock().unwrap().clone();
     agent_control::build_status(
         running,
         has_handle,
         last_managed.as_deref(),
-        String::new(), // guidance preenchido no webview com sessão ativa (T016)
+        String::new(), // guidance preenchido no webview com sessão ativa
         None,
+        &binary,
+        managed_alive,
     )
 }
 
@@ -133,7 +155,15 @@ fn start_agent(
     session_id: String,
     profile_path: String,
 ) -> Result<AgentStatus, String> {
-    let mut command = Command::new("assistant-hub-audio");
+    let binary = resolve_binary_for_state(&state);
+    if binary.source == BinarySource::Missing || binary.path.is_none() {
+        return Err(
+            "binário assistant-hub-audio não encontrado (sidecar ausente, sem ASSISTANT_HUB_AUDIO_BIN/config e fora do PATH) — veja docs/desktop-shell/packaging.md"
+                .to_string(),
+        );
+    }
+    let program = agent_control::command_program(&binary);
+    let mut command = Command::new(&program);
     command
         .arg("run")
         .arg("--session")
@@ -152,6 +182,10 @@ fn start_agent(
                 last_error: None,
                 agent_session_id: Some(session_id),
                 agent_session_source: AgentSessionSource::Managed,
+                binary_path: binary.path.as_ref().map(|p| p.display().to_string()),
+                binary_source: binary.source,
+                agent_version: binary.version.clone(),
+                healthy: true,
             })
         }
         Err(err) => Err(err.to_string()),
@@ -279,8 +313,8 @@ fn main() {
             });
             Ok(())
         })
-        // Fechar a janela NÃO encerra session-core nem o agent Windows por padrão — nenhum
-        // hook de "on_window_event"/"exit" mata processos auxiliares aqui (edge case da spec).
+        // 025: encerra agent **gerenciado** no Exit; session-core e agents Guided/externos
+        // não são tocados (FR-006).
         .invoke_handler(tauri::generate_handler![
             get_session_status,
             create_session,
@@ -300,6 +334,15 @@ fn main() {
             test_ai_provider_connection,
             invoke_ai_provider,
         ])
-        .run(tauri::generate_context!())
-        .expect("erro ao iniciar o shell desktop");
+        .build(tauri::generate_context!())
+        .expect("erro ao construir o shell desktop")
+        .run(|app_handle, event| {
+            if matches!(event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    let mut guard = state.managed_agent.lock().unwrap();
+                    agent_control::shutdown_managed(&mut guard);
+                    *state.last_managed_session_id.lock().unwrap() = None;
+                }
+            }
+        });
 }

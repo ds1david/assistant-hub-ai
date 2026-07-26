@@ -61,6 +61,9 @@ export type ControlMode = "Direct" | "Guided";
 
 export type AgentSessionSource = "cmdline" | "managed" | "unknown";
 
+/** 025 — origem do binário do agent (sidecar / config / PATH). */
+export type BinarySource = "sidecar" | "config" | "path" | "missing";
+
 export interface AgentStatus {
   running: boolean;
   controlMode: ControlMode;
@@ -69,11 +72,18 @@ export interface AgentStatus {
   /** Sessão resolvida do agent (cmdline → managed → null). */
   agentSessionId: string | null;
   agentSessionSource: AgentSessionSource;
+  /** 025 — path resolvido; null se missing. */
+  binaryPath?: string | null;
+  binarySource?: BinarySource;
+  agentVersion?: string | null;
+  healthy?: boolean;
 }
 
 export interface ShellConfig {
   sessionCoreBaseUrl: string;
   windowState?: { width: number; height: number; x?: number; y?: number };
+  /** Override local do binário do agent (025). */
+  audioAgentBin?: string | null;
 }
 
 export function getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {

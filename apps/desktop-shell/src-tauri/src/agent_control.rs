@@ -2,8 +2,10 @@
 //! Resolução de sessionId do agent: cmdline `--session` → último start gerenciado → desconhecida
 //! (specs/020-issue-47-sessionid-align).
 
+use crate::sidecar::{BinaryResolution, BinarySource};
 use serde::Serialize;
 use std::ffi::OsString;
+use std::path::PathBuf;
 use std::process::Child;
 use sysinfo::System;
 
@@ -38,6 +40,12 @@ pub struct AgentStatus {
     /// Sessão resolvida do agent; None se desconhecida ou N/A.
     pub agent_session_id: Option<String>,
     pub agent_session_source: AgentSessionSource,
+    /// 025 — caminho resolvido do binário (sidecar/config/PATH).
+    pub binary_path: Option<String>,
+    pub binary_source: BinarySource,
+    pub agent_version: Option<String>,
+    /// Processo em execução e (se gerenciado) child ainda vivo.
+    pub healthy: bool,
 }
 
 /// Constrói o comando exato que o operador rodaria manualmente.
@@ -132,6 +140,8 @@ pub fn build_status(
     last_managed_session_id: Option<&str>,
     guidance_command: String,
     last_error: Option<String>,
+    binary: &BinaryResolution,
+    managed_child_alive: bool,
 ) -> AgentStatus {
     let cmdline_id = if running {
         detect_agent_cmdline_session()
@@ -144,6 +154,11 @@ pub fn build_status(
         last_managed_session_id,
         has_managed_handle,
     );
+    let healthy = if has_managed_handle {
+        running && managed_child_alive
+    } else {
+        running
+    };
     AgentStatus {
         running,
         control_mode: resolve_control_mode(running, has_managed_handle),
@@ -151,7 +166,34 @@ pub fn build_status(
         last_error,
         agent_session_id,
         agent_session_source,
+        binary_path: binary.path.as_ref().map(|p| p.display().to_string()),
+        binary_source: binary.source,
+        agent_version: binary.version.clone(),
+        healthy,
     }
+}
+
+/// Encerra o agent gerenciado se houver handle (shutdown coordenado 025 / FR-006).
+pub fn shutdown_managed(managed: &mut Option<ManagedAgentProcess>) {
+    if let Some(mut process) = managed.take() {
+        let _ = stop(&mut process);
+    }
+}
+
+/// Child ainda em execução (try_wait None).
+pub fn managed_is_alive(managed: &mut ManagedAgentProcess) -> bool {
+    match managed.child.try_wait() {
+        Ok(None) => true,
+        _ => false,
+    }
+}
+
+/// Display path for Command::new — falls back to bare name when missing.
+pub fn command_program(binary: &BinaryResolution) -> PathBuf {
+    binary
+        .path
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("assistant-hub-audio"))
 }
 
 fn process_matches_agent(process: &sysinfo::Process) -> bool {
@@ -348,5 +390,40 @@ mod tests {
         command.arg("5");
         let mut managed = start(command).expect("start deve funcionar com processo fake");
         assert!(stop(&mut managed).is_ok());
+    }
+
+    #[test]
+    fn shutdown_managed_kills_child_and_clears_slot() {
+        let mut command = Command::new("sleep");
+        command.arg("30");
+        let managed = start(command).expect("start sleep");
+        let mut slot = Some(managed);
+        shutdown_managed(&mut slot);
+        assert!(slot.is_none());
+    }
+
+    #[test]
+    fn build_status_includes_binary_resolution_fields() {
+        let binary = BinaryResolution {
+            path: Some(PathBuf::from("/tmp/assistant-hub-audio")),
+            source: BinarySource::Sidecar,
+            version: Some("0.2.0".into()),
+        };
+        let status = build_status(
+            true,
+            true,
+            Some("sess-1"),
+            guidance_command("sess-1", "p.yaml"),
+            None,
+            &binary,
+            true,
+        );
+        assert_eq!(status.binary_source, BinarySource::Sidecar);
+        assert_eq!(status.agent_version.as_deref(), Some("0.2.0"));
+        assert!(status.healthy);
+        assert_eq!(
+            status.binary_path.as_deref(),
+            Some("/tmp/assistant-hub-audio")
+        );
     }
 }
