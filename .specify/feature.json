@@ -1,4 +1,4 @@
 {
-  "feature_directory": "specs/028-issue-61-live-answer-interview-mode",
-  "note": "GitHub #61 — live-answer modo entrevista: contexto mic+system, resposta 1ª pessoa, latência. Branch: feature/issue-61-live-answer-modo-entrevista-contexto-mic-system"
+  "feature_directory": "specs/029-issue-64-secure-credentials",
+  "note": "Epic #63 residual. Active: #64 secure credentials (029). Next: #65 R3.2, #66 release, #67 diagnostics, #68 R4."
 }

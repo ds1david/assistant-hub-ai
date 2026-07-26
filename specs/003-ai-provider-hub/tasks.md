@@ -6,7 +6,7 @@ Visão R6 completa. Fatia entregue: `specs/015-issue-37-ai-provider-hub/` (+ `01
 - [x] Adicionar schema `ai-provider-profile.v1`. (`contracts/ai-provider-profile.v1.schema.json`)
 - [x] Criar parser e validador YAML. (`ProviderProfileValidator`, store + hot-reload)
 - [x] Implementar `secretRef` com backend `env`. (`EnvSecretResolver`)
-- [ ] Implementar armazenamento seguro Windows no desktop.
+- [ ] Implementar armazenamento seguro Windows no desktop. → **[#64](https://github.com/ds1david/assistant-hub-ai/issues/64)**
 - [x] Criar adaptador OpenAI-compatible genérico. (`OpenAiCompatibleAdapter`)
 - [x] Criar presets Ollama e NVIDIA NIM. (`samples/ai-providers/presets-ollama-nim.example.yaml` + `providers.example.yaml`; type openai-compatible)
 - [x] Implementar descoberta via `/v1/models` quando suportada. (`specs/027` — `GET /api/ai-providers/{id}/models`)
@@ -21,4 +21,8 @@ Visão R6 completa. Fatia entregue: `specs/015-issue-37-ai-provider-hub/` (+ `01
 ## Notas de higiene (2026-07-26)
 
 015/017/026/027 cobrem a maior parte do hub. **Ainda aberto na visão 003**:
-armazenamento seguro Windows (DPAPI/keyring) e custo monetário informado.
+armazenamento seguro Windows (DPAPI/keyring) → **#64**; custo monetário informado (sem inventar USD).
+
+**Epic residual:** [#63](https://github.com/ds1david/assistant-hub-ai/issues/63).  
+R3.2 (busca/decisões): [#65](https://github.com/ds1david/assistant-hub-ai/issues/65).  
+R4 Visual: [#68](https://github.com/ds1david/assistant-hub-ai/issues/68).
