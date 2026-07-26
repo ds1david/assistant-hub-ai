@@ -137,6 +137,26 @@ fn get_session_memory_items(
 }
 
 #[tauri::command]
+fn list_visual_frames(state: State<AppState>, session_id: String) -> Result<serde_json::Value, String> {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    SessionCoreClient::new(base_url)
+        .list_visual_frames(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn create_visual_frame(
+    state: State<AppState>,
+    session_id: String,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    SessionCoreClient::new(base_url)
+        .create_visual_frame(&session_id, &body)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_transcript_feed(state: State<AppState>, session_id: String) -> Vec<TranscriptFeedEntry> {
     let base_url = state.config.lock().unwrap().session_core_base_url.clone();
     let client = SessionCoreClient::new(base_url);
@@ -524,6 +544,8 @@ fn main() {
             list_sessions,
             search_session_memory,
             get_session_memory_items,
+            list_visual_frames,
+            create_visual_frame,
             get_transcript_feed,
             get_agent_status,
             start_agent,

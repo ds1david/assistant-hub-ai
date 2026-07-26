@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assistanthub.ai/contracts/visual-frame-event.v1.schema.json",
+  "title": "VisualFrameEvent v1",
+  "description": "R4 visual context frame metadata + OCR text (issue #68). Raw pixels optional; never log ocrText or image bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "sessionId", "frameId", "capturedAt", "consent", "ocrText"],
+  "properties": {
+    "type": {
+      "const": "visual.frame.v1"
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "frameId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "consent": {
+      "type": "boolean",
+      "description": "Operator explicit consent for this capture"
+    },
+    "ocrText": {
+      "type": "string",
+      "description": "OCR/description text after optional PII masking"
+    },
+    "ocrEngine": {
+      "type": "string",
+      "description": "Engine id, e.g. fake, tesseract, remote-policy"
+    },
+    "masked": {
+      "type": "boolean",
+      "description": "True if PII masking was applied"
+    },
+    "linkedEventId": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Optional transcript HubEvent id near capture time"
+    },
+    "source": {
+      "type": "string",
+      "description": "Capture source label, e.g. shell-stub, windows-dxgi"
+    },
+    "contentType": {
+      "type": "string",
+      "description": "If image bytes were accepted, e.g. image/png"
+    },
+    "width": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "height": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "sha256": {
+      "type": ["string", "null"],
+      "description": "Hex sha256 of image bytes if stored or hashed; never the bytes themselves in logs"
+    },
+    "imageStored": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

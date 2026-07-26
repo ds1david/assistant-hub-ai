@@ -139,6 +139,40 @@ export function getSessionMemoryItems(sessionId: string): Promise<MemoryItem[]> 
   return invoke("get_session_memory_items", { sessionId });
 }
 
+export interface VisualFrameDto {
+  eventId: string;
+  sessionId?: string;
+  type?: string;
+  occurredAt: string;
+  payload?: {
+    ocrText?: string;
+    masked?: boolean;
+    source?: string;
+    frameId?: string;
+    consent?: boolean;
+  };
+}
+
+export function listVisualFrames(sessionId: string): Promise<VisualFrameDto[]> {
+  return invoke("list_visual_frames", { sessionId });
+}
+
+export function createVisualFrame(
+  sessionId: string,
+  body: {
+    consent: boolean;
+    ocrText?: string | null;
+    source?: string | null;
+    imageBase64?: string | null;
+    linkedEventId?: string | null;
+    width?: number | null;
+    height?: number | null;
+    contentType?: string | null;
+  },
+): Promise<VisualFrameDto> {
+  return invoke("create_visual_frame", { sessionId, body });
+}
+
 export function getAgentStatus(): Promise<AgentStatus> {
   return invoke("get_agent_status");
 }

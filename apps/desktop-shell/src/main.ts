@@ -2,6 +2,7 @@
 // Sem auto-create silencioso de sessão (FR-026). Prefs do Assistente por sessão com save on change.
 import {
   createSession,
+  createVisualFrame,
   deleteAiProvider,
   getAgentStatus,
   getAiProviderSecretPreview,
@@ -14,6 +15,7 @@ import {
   invokeAiProvider,
   listAiProviders,
   listSessions,
+  listVisualFrames,
   probeHttpHealth,
   saveAiProvider,
   searchSessionMemory,
@@ -41,6 +43,7 @@ import {
   renderDiagnosticsPanel,
   type DiagnosticsPanelState,
 } from "./diagnostics-panel";
+import { renderVisualPanel, type VisualPanelState, type VisualFrameView } from "./visual-panel";
 import {
   DEFAULT_ASSISTANT_PREFS,
   clonePrefs,
@@ -120,6 +123,15 @@ let diagnosticsState: DiagnosticsPanelState = {
   copyFeedback: null,
 };
 
+let visualPanelState: VisualPanelState = {
+  sessionId: null,
+  consent: false,
+  draftOcr: "",
+  frames: [],
+  error: null,
+  busy: false,
+};
+
 const assistantController = new AssistantAutoController({
   invoke: (input) => {
     if (!activeSessionId) {
@@ -136,6 +148,109 @@ function memoryPanelContainer(): HTMLElement {
 
 function diagnosticsPanelContainer(): HTMLElement {
   return document.getElementById("diagnostics-panel") as HTMLElement;
+}
+
+function visualPanelContainer(): HTMLElement {
+  return document.getElementById("visual-panel") as HTMLElement;
+}
+
+function paintVisualPanel(): void {
+  const el = visualPanelContainer();
+  if (!el) {
+    return;
+  }
+  renderVisualPanel(el, visualPanelState, {
+    onConsentChange: (consent) => {
+      visualPanelState = { ...visualPanelState, consent };
+      paintVisualPanel();
+    },
+    onDraftChange: (draftOcr) => {
+      visualPanelState = { ...visualPanelState, draftOcr };
+    },
+    onCapture: () => {
+      void captureVisualFrame();
+    },
+    onRefresh: () => {
+      void refreshVisualFrames();
+    },
+  });
+}
+
+function mapVisualFrameDto(raw: {
+  eventId: string;
+  occurredAt: string;
+  payload?: {
+    ocrText?: string;
+    masked?: boolean;
+    source?: string;
+    frameId?: string;
+  };
+}): VisualFrameView {
+  return {
+    eventId: raw.eventId,
+    occurredAt: raw.occurredAt,
+    ocrText: raw.payload?.ocrText ?? "",
+    masked: raw.payload?.masked,
+    source: raw.payload?.source,
+    frameId: raw.payload?.frameId,
+  };
+}
+
+async function refreshVisualFrames(): Promise<void> {
+  if (!activeSessionId) {
+    visualPanelState = {
+      ...visualPanelState,
+      sessionId: null,
+      frames: [],
+    };
+    paintVisualPanel();
+    return;
+  }
+  visualPanelState = { ...visualPanelState, busy: true, error: null };
+  paintVisualPanel();
+  try {
+    const list = await listVisualFrames(activeSessionId);
+    const frames = (Array.isArray(list) ? list : []).map((f) => mapVisualFrameDto(f));
+    visualPanelState = {
+      ...visualPanelState,
+      sessionId: activeSessionId,
+      frames,
+      busy: false,
+      error: null,
+    };
+  } catch (error) {
+    visualPanelState = {
+      ...visualPanelState,
+      sessionId: activeSessionId,
+      busy: false,
+      error: String(error),
+    };
+  }
+  paintVisualPanel();
+}
+
+async function captureVisualFrame(): Promise<void> {
+  if (!activeSessionId || !visualPanelState.consent) {
+    return;
+  }
+  visualPanelState = { ...visualPanelState, busy: true, error: null };
+  paintVisualPanel();
+  try {
+    await createVisualFrame(activeSessionId, {
+      consent: true,
+      ocrText: visualPanelState.draftOcr || "Frame capturado (stub shell)",
+      source: "shell-stub",
+    });
+    visualPanelState = { ...visualPanelState, draftOcr: "", busy: false };
+    await refreshVisualFrames();
+  } catch (error) {
+    visualPanelState = {
+      ...visualPanelState,
+      busy: false,
+      error: String(error),
+    };
+    paintVisualPanel();
+  }
 }
 
 function paintDiagnosticsPanel(): void {
@@ -440,6 +555,15 @@ export async function selectSession(sessionId: string): Promise<void> {
   };
   paintMemoryPanel();
   void refreshMemoryItems();
+  visualPanelState = {
+    ...visualPanelState,
+    sessionId,
+    frames: [],
+    consent: false,
+    error: null,
+  };
+  paintVisualPanel();
+  void refreshVisualFrames();
   void refreshAgentPanel();
   void pollSessionStatus();
   void pollTranscriptFeed();
@@ -780,6 +904,7 @@ function bootstrap(): void {
   paintAssistant();
   paintMemoryPanel();
   paintDiagnosticsPanel();
+  paintVisualPanel();
   paintSessionPicker();
   void refreshSessionList().then(() => {
     void refreshAgentPanel();

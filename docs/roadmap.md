@@ -44,6 +44,8 @@
 - associação de frames com trechos da conversa;
 - políticas de mascaramento de informações sensíveis.
 
+**P0 (issue #68 / specs/033):** contrato `visual.frame.v1`, ingestão session-core com consentimento + OCR stub + PII mask, painel shell. Captura DXGI/Tesseract real = follow-up.
+
 ## R5 — Desktop Distribution
 
 - shell Tauri 2;
