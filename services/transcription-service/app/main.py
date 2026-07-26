@@ -358,6 +358,20 @@ def create_app(
 
         def enqueue_latest(window: bytes | None, *, disconnect: bool = False) -> None:
             nonlocal dropped_windows
+            # Never drop a disconnect tick: drain room first so finalization always runs.
+            if disconnect:
+                while windows.full():
+                    try:
+                        windows.get_nowait()
+                        windows.task_done()
+                        dropped_windows += 1
+                        metrics.record_dropped_window(
+                            session_id=session_id, channel_id=channel_id
+                        )
+                    except asyncio.QueueEmpty:
+                        break
+                windows.put_nowait((window, True))
+                return
             if windows.full():
                 try:
                     windows.get_nowait()
@@ -368,7 +382,7 @@ def create_app(
                     )
                 except asyncio.QueueEmpty:
                     pass
-            windows.put_nowait((window, disconnect))
+            windows.put_nowait((window, False))
 
         try:
             while True:
@@ -382,6 +396,9 @@ def create_app(
         except WebSocketDisconnect:
             pass
         finally:
+            # Drain in-flight windows before flush so disconnect is not racing a full queue
+            # (maxsize=2) and cannot drop the local-speech window that still needs delivery.
+            await windows.join()
             remaining = transcriber.flush()
             if remaining is not None:
                 enqueue_latest(remaining, disconnect=True)
