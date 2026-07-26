@@ -268,6 +268,46 @@ impl SessionCoreClient {
         }
     }
 
+    /// GET /api/sessions/{id}/visual-frames (R4 / #68)
+    pub fn list_visual_frames(&self, session_id: &str) -> Result<serde_json::Value, ClientError> {
+        let url = format!("{}/api/sessions/{session_id}/visual-frames", self.base_url);
+        let resp = self
+            .http
+            .get(url)
+            .send()
+            .map_err(|e| ClientError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => resp
+                .json::<serde_json::Value>()
+                .map_err(|e| ClientError::Decode(e.to_string())),
+            404 => Err(ClientError::NotFound),
+            other => Err(ClientError::Http(other.to_string())),
+        }
+    }
+
+    /// POST /api/sessions/{id}/visual-frames
+    pub fn create_visual_frame(
+        &self,
+        session_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, ClientError> {
+        let url = format!("{}/api/sessions/{session_id}/visual-frames", self.base_url);
+        let resp = self
+            .http
+            .post(url)
+            .json(body)
+            .send()
+            .map_err(|e| ClientError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 | 201 => resp
+                .json::<serde_json::Value>()
+                .map_err(|e| ClientError::Decode(e.to_string())),
+            403 => Err(ClientError::Http("403 consent required".into())),
+            404 => Err(ClientError::NotFound),
+            other => Err(ClientError::Http(other.to_string())),
+        }
+    }
+
     pub fn get_health(&self) -> HealthState {
         let url = format!("{}/actuator/health", self.base_url);
         match self.http.get(url).send() {
