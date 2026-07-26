@@ -39,7 +39,29 @@
     "latencyMs": {"type": "integer", "minimum": 0},
     "audioSeconds": {"type": "number", "minimum": 0},
     "droppedWindows": {"type": "integer", "minimum": 0},
-    "occurredAt": {"type": "string", "format": "date-time"}
+    "occurredAt": {"type": "string", "format": "date-time"},
+    "prosody": {
+      "type": "object",
+      "description": "Optional question-intonation features on Final events only (023). Absent on partials and when extraction is off/failed.",
+      "required": ["questionScore"],
+      "properties": {
+        "questionScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Likelihood the utterance is a question from pitch/energy contour [0,1]."
+        },
+        "contour": {
+          "type": "string",
+          "enum": ["rising", "falling", "flat", "unknown"]
+        },
+        "f0EndSlopeSemitones": {
+          "type": "number",
+          "description": "Approximate F0 slope over the end window in semitones (positive ≈ rising)."
+        }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

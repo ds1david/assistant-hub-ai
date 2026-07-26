@@ -24,6 +24,7 @@ import { AssistantAutoController } from "./assistant-auto";
 import { renderAssistantPanel } from "./assistant-panel";
 import {
   DEFAULT_ASSISTANT_PREFS,
+  clonePrefs,
   loadPrefs,
   savePrefs,
   type AssistantSessionPreferences,
@@ -164,6 +165,9 @@ function computeAssistantEmptyKind() {
     autoEnabled: view.prefs.autoEnabled,
     enabledSourceTypes: view.prefs.enabledSourceTypes,
     feed: lastTranscriptFeed,
+    interviewMode: view.prefs.interviewMode,
+    useProsody: view.prefs.useProsody,
+    prosodyThreshold: view.prefs.prosodyThreshold,
   });
 }
 
@@ -198,6 +202,16 @@ function paintAssistant(): void {
     },
     onInputModeChange: (mode: InputMode) => {
       const prefs = { ...currentPrefsFromController(), inputMode: mode };
+      assistantController.setPrefs(prefs);
+      void persistPrefs(prefs);
+    },
+    onToggleInterviewMode: (enabled) => {
+      const prefs = { ...currentPrefsFromController(), interviewMode: enabled };
+      assistantController.setPrefs(prefs);
+      void persistPrefs(prefs);
+    },
+    onToggleUseProsody: (enabled) => {
+      const prefs = { ...currentPrefsFromController(), useProsody: enabled };
       assistantController.setPrefs(prefs);
       void persistPrefs(prefs);
     },
@@ -250,10 +264,7 @@ export async function selectSession(sessionId: string): Promise<void> {
     const prefs = await loadPrefs(sessionId);
     assistantController.setPrefs(prefs);
   } catch {
-    assistantController.setPrefs({
-      ...DEFAULT_ASSISTANT_PREFS,
-      enabledSourceTypes: [...DEFAULT_ASSISTANT_PREFS.enabledSourceTypes],
-    });
+    assistantController.setPrefs(clonePrefs(DEFAULT_ASSISTANT_PREFS));
   }
   updateAssistantGuards();
   paintSessionPicker();

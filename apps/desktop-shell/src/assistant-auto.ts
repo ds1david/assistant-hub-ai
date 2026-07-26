@@ -1,10 +1,10 @@
 // Assistente automático a partir do transcript (perguntas finais → rota live-answer).
-// Gaps vs protótipo (T001): prefs por sessão (default auto off, só system, contexto recente),
-// filtro de origem (desconhecida inelegível), builder de input, FR-004 canônica, ordem/queued.
+// 023: FR-002 lexical expandido, FR-004 interviewMode, FR-006 isQuestionCandidate (OR gate).
 // Cancelamento é lógico (resposta obsoleta descartada) — invoke Tauri/HTTP sem abort token.
 import type { InvocationResult, TranscriptFeedEntry } from "./api-client";
 import {
   DEFAULT_ASSISTANT_PREFS,
+  clonePrefs,
   type AssistantSessionPreferences,
   type CanonicalSourceType,
   type InputMode,
@@ -60,9 +60,9 @@ export interface AssistantAutoDeps {
 }
 
 /**
- * Prefixos canônicos FR-004 + imperativos típicos de entrevista/mock
- * (case-insensitive no início do trecho ou de sentença).
+ * Prefixos canônicos FR-002 (supersede de 019 FR-004 no shell) + imperativos de entrevista.
  * Ordem: mais longos primeiro para evitar match parcial acidental.
+ * Fonte canônica da lista: specs/023-issue-52-question-detection-quality/spec.md FR-002.
  */
 const PT_PREFIXES = [
   "será que",
@@ -172,7 +172,7 @@ function startsWithQuestionPrefix(candidate: string): boolean {
 }
 
 /**
- * Heurística FR-004: ≥8 chars + (`?` ou prefixo canônico/entrevista pt/en
+ * Heurística FR-002: ≥8 chars + (`?` ou prefixo canônico/entrevista pt/en
  * no início do trecho, após vocativo, ou em nova sentença).
  */
 export function looksLikeQuestion(text: string): boolean {
@@ -190,6 +190,14 @@ export function looksLikeQuestion(text: string): boolean {
     }
   }
   return false;
+}
+
+/** Minimal shape for FR-006 gate (feed entry or test fixture). */
+export interface QuestionGateEntry {
+  kind: string;
+  text?: string | null;
+  sourceType?: string | null;
+  prosody?: { questionScore?: number | null } | null;
 }
 
 /** Normaliza sourceType do feed para canônico; desconhecido/ausente → null (inelegível). */
@@ -217,19 +225,42 @@ export function isOriginEnabled(
   return enabled.includes(sourceType);
 }
 
-export function shouldAutoAnswerFromEntry(
-  entry: TranscriptFeedEntry,
+/**
+ * Gate multimodal FR-006 (puro, sem I/O):
+ * Final AND origin enabled AND (lexical OR interviewMode system≥8 OR useProsody score≥T).
+ */
+export function isQuestionCandidate(
+  entry: QuestionGateEntry,
   prefs: AssistantSessionPreferences,
 ): boolean {
   if (entry.kind !== "Final") {
     return false;
   }
   const text = entry.text?.trim() ?? "";
-  if (!looksLikeQuestion(text)) {
+  const origin = normalizeSourceType(entry.sourceType);
+  if (!isOriginEnabled(origin, prefs.enabledSourceTypes)) {
     return false;
   }
-  const origin = normalizeSourceType(entry.sourceType);
-  return isOriginEnabled(origin, prefs.enabledSourceTypes);
+  if (looksLikeQuestion(text)) {
+    return true;
+  }
+  if (prefs.interviewMode && origin === "system" && text.length >= 8) {
+    return true;
+  }
+  if (prefs.useProsody) {
+    const score = entry.prosody?.questionScore;
+    if (typeof score === "number" && !Number.isNaN(score) && score >= prefs.prosodyThreshold) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function shouldAutoAnswerFromEntry(
+  entry: TranscriptFeedEntry,
+  prefs: AssistantSessionPreferences,
+): boolean {
+  return isQuestionCandidate(entry, prefs);
 }
 
 export function extractNewQuestions(
@@ -293,10 +324,7 @@ export function buildInvokeInput(
 }
 
 export class AssistantAutoController {
-  private prefs: AssistantSessionPreferences = {
-    ...DEFAULT_ASSISTANT_PREFS,
-    enabledSourceTypes: [...DEFAULT_ASSISTANT_PREFS.enabledSourceTypes],
-  };
+  private prefs: AssistantSessionPreferences = clonePrefs(DEFAULT_ASSISTANT_PREFS);
   private turns: AssistantTurn[] = [];
   private seenEventIds = new Set<string>();
   private recentFinals: { eventId: string; text: string }[] = [];
@@ -322,11 +350,7 @@ export class AssistantAutoController {
   getView(): AssistantAutoView {
     return {
       enabled: this.prefs.autoEnabled,
-      prefs: {
-        autoEnabled: this.prefs.autoEnabled,
-        enabledSourceTypes: [...this.prefs.enabledSourceTypes],
-        inputMode: this.prefs.inputMode,
-      },
+      prefs: clonePrefs(this.prefs),
       turns: [...this.turns],
       conflict: this.conflict,
       busy: this.runningTurnId !== null,
@@ -336,20 +360,12 @@ export class AssistantAutoController {
   }
 
   setPrefs(prefs: AssistantSessionPreferences): void {
-    this.prefs = {
-      autoEnabled: prefs.autoEnabled,
-      enabledSourceTypes: [...prefs.enabledSourceTypes],
-      inputMode: prefs.inputMode,
-    };
+    this.prefs = clonePrefs(prefs);
     this.emit();
   }
 
   getPrefs(): AssistantSessionPreferences {
-    return {
-      autoEnabled: this.prefs.autoEnabled,
-      enabledSourceTypes: [...this.prefs.enabledSourceTypes],
-      inputMode: this.prefs.inputMode,
-    };
+    return clonePrefs(this.prefs);
   }
 
   setEnabled(enabled: boolean): void {

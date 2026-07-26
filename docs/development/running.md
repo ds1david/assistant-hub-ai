@@ -161,10 +161,41 @@ Instalador: `cargo tauri build --features gui` — artefatos em `src-tauri\targe
 # ou: assistant-hub-audio run --session <uuid-da-sessao-ativa> --profile <perfil.yaml>
 ```
 
-8. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** reconhecidos como pergunta (partials **não** disparam — empty state «aguardando trecho final»).
+8. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** elegíveis (partials **não** disparam — empty state «aguardando trecho final»). Opcional: **modo entrevista** (todo Final system ≥ 8 chars) e **usar prosódia** (score de entonação no Final quando o STT enviar `prosody`).
 9. Preferências do Assistente: `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
 
-**Verificação:** janela abre; lista de sessões via `GET /api/sessions` (só session-core); clique/criar define «Sessão ativa» com UUID completo; agent e UI com o **mesmo** sessionId (sem banner de mismatch); salvar provedor **sem** HTTP 500; com automático on + final elegível → interação no Assistente (ou erro de provedor legível).
+### Onde ver a resposta do modelo (não é o dashboard STT)
+
+| Superfície | O que mostra |
+|------------|--------------|
+| Desktop shell → painel **Assistente (respostas automáticas)** | Pergunta + resposta (ou erro de provedor) da rota `live-answer` |
+| Browser `http://localhost:8001` (Streaming Foundation) | Transcript, sessionId no header, canais — **não** é chat nem resposta do modelo |
+
+Se o transcript aparece no :8001 mas “nada responde”: abra o **shell**, confira sessão ativa = agent, automático **on**, origem **sistema**, trecho **Final** elegível (ou modo entrevista). Checklist: [specs/023-issue-52-question-detection-quality/quickstart.md](../../specs/023-issue-52-question-detection-quality/quickstart.md).
+
+### Modelo STT e hotwords (opt-in)
+
+Default de produto: `WHISPER_MODEL=small` (não mude sem intenção).
+
+```bash
+# No .env (raiz) — upgrade opt-in
+WHISPER_MODEL=medium          # ou large-v3 se houver VRAM
+# WHISPER_HOTWORDS_FILE=/config/whisper-hotwords.txt  # já é o default no compose
+
+# Recriar o container de transcrição (sem rebuild de imagem obrigatório)
+./scripts/wsl/compose.sh up -d --force-recreate transcription  # nome do serviço conforme compose do repo
+# ou: docker compose … up -d --force-recreate <serviço-stt>
+
+# Conferir modelo carregado
+curl -s http://localhost:8001/health | jq '{model, modelLoaded, hotwordsConfigured, prosodyEnabled}'
+```
+
+- **VRAM/latência**: `small` é o baseline; `medium` melhora jargão técnico com mais VRAM/latência; `large-v3` só se a GPU comportar.
+- **Rollback**: `WHISPER_MODEL=small` + recriar o container.
+- **Hotwords**: `config/whisper-hotwords.txt` (Spring, REST, session-core, …).
+- **Prosódia** (opcional, default off): `PROSODY_ENABLED=true` no serviço de transcrição; health expõe `prosodyEnabled`. Extração **no STT**, não no agent Windows.
+
+**Verificação:** janela abre; lista de sessões via `GET /api/sessions` (só session-core); clique/criar define «Sessão ativa» com UUID completo; agent e UI com o **mesmo** sessionId (sem banner de mismatch); salvar provedor **sem** HTTP 500; com automático on + final elegível → interação no **Assistente** (ou erro de provedor legível) — **não** no browser :8001.
 
 Config local: `%APPDATA%\ai.assistanthub.desktopshell\shell-config.json` (`sessionCoreBaseUrl`, padrão `http://localhost:8080`). Sample de rota `live-answer`: `samples/ai-providers/providers.example.yaml` (seed em `config/ai-providers.yaml` se o hub copiar o sample).
 

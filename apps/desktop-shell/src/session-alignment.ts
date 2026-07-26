@@ -1,11 +1,11 @@
 // Alinhamento sessionId UI↔agent e estados vazios do Assistente (020 / FR-005–FR-010).
 import type { AgentStatus, FeedEntryKind, TranscriptFeedEntry } from "./api-client";
+import { isQuestionCandidate } from "./assistant-auto";
 import {
-  looksLikeQuestion,
-  normalizeSourceType,
-  isOriginEnabled,
-} from "./assistant-auto";
-import type { CanonicalSourceType } from "./assistant-prefs";
+  DEFAULT_ASSISTANT_PREFS,
+  type AssistantSessionPreferences,
+  type CanonicalSourceType,
+} from "./assistant-prefs";
 
 export type AlignmentState =
   | "no_active_session"
@@ -51,7 +51,11 @@ export function resolveAssistantEmptyKind(input: {
   alignment: AlignmentState;
   autoEnabled: boolean;
   enabledSourceTypes: readonly CanonicalSourceType[];
-  feed: readonly Pick<TranscriptFeedEntry, "kind" | "text" | "sourceType">[];
+  feed: readonly Pick<TranscriptFeedEntry, "kind" | "text" | "sourceType" | "prosody">[];
+  /** Optional 023 prefs for gate; defaults off so legacy callers stay lexical-only. */
+  interviewMode?: boolean;
+  useProsody?: boolean;
+  prosodyThreshold?: number;
 }): AssistantEmptyKind {
   if (input.alignment === "mismatched") {
     return "session_mismatch";
@@ -66,16 +70,31 @@ export function resolveAssistantEmptyKind(input: {
     return "awaiting_transcript";
   }
 
+  const gatePrefs: AssistantSessionPreferences = {
+    ...DEFAULT_ASSISTANT_PREFS,
+    autoEnabled: true,
+    enabledSourceTypes: [...input.enabledSourceTypes],
+    interviewMode: Boolean(input.interviewMode),
+    useProsody: Boolean(input.useProsody),
+    prosodyThreshold:
+      typeof input.prosodyThreshold === "number"
+        ? input.prosodyThreshold
+        : DEFAULT_ASSISTANT_PREFS.prosodyThreshold,
+  };
+
   const hasPartial = input.feed.some((e) => e.kind === ("Partial" as FeedEntryKind));
   const finals = input.feed.filter((e) => e.kind === ("Final" as FeedEntryKind));
-  const hasEligibleFinal = finals.some((e) => {
-    const text = e.text?.trim() ?? "";
-    if (!looksLikeQuestion(text)) {
-      return false;
-    }
-    const origin = normalizeSourceType(e.sourceType);
-    return isOriginEnabled(origin, input.enabledSourceTypes);
-  });
+  const hasEligibleFinal = finals.some((e) =>
+    isQuestionCandidate(
+      {
+        kind: e.kind,
+        text: e.text,
+        sourceType: e.sourceType,
+        prosody: e.prosody,
+      },
+      gatePrefs,
+    ),
+  );
 
   if (hasEligibleFinal) {
     // Com turn ainda zero e final elegível, o orquestrador deve consumir em breve;

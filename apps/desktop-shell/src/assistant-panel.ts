@@ -8,6 +8,8 @@ export interface AssistantPanelCallbacks {
   onToggleEnabled: (enabled: boolean) => void;
   onToggleOrigin: (origin: CanonicalSourceType, enabled: boolean) => void;
   onInputModeChange: (mode: InputMode) => void;
+  onToggleInterviewMode: (enabled: boolean) => void;
+  onToggleUseProsody: (enabled: boolean) => void;
   onResolveConflict: (choice: ConflictChoice) => void;
 }
 
@@ -22,6 +24,9 @@ export function renderAssistantPanel(
     autoEnabled: view.enabled,
     enabledSourceTypes: ["system"] as CanonicalSourceType[],
     inputMode: "question-plus-recent-context" as InputMode,
+    interviewMode: false,
+    useProsody: false,
+    prosodyThreshold: 0.65,
   };
   const systemOn = prefs.enabledSourceTypes.includes("system");
   const micOn = prefs.enabledSourceTypes.includes("microphone");
@@ -69,6 +74,16 @@ export function renderAssistantPanel(
             </option>
           </select>
         </label>
+        <label class="assistant-toggle" title="Todo Final da origem sistema (≥8 chars) vira candidato">
+          <input type="checkbox" data-testid="assistant-interview-mode" data-action="toggle-interview"
+            ${prefs.interviewMode ? "checked" : ""} ${disabledAttr} />
+          modo entrevista (todo final system)
+        </label>
+        <label class="assistant-toggle" title="Usar score de entonação no Final quando presente">
+          <input type="checkbox" data-testid="assistant-use-prosody" data-action="toggle-prosody"
+            ${prefs.useProsody ? "checked" : ""} ${disabledAttr} />
+          usar prosódia (entonação)
+        </label>
       </div>
       ${view.conflict ? renderConflict(view) : ""}
       ${renderTurns(view.turns, view.emptyKind ?? null)}
@@ -102,6 +117,18 @@ export function renderAssistantPanel(
       callbacks.onInputModeChange(value);
     },
   );
+
+  container
+    .querySelector<HTMLInputElement>('[data-action="toggle-interview"]')
+    ?.addEventListener("change", (event) => {
+      callbacks.onToggleInterviewMode((event.target as HTMLInputElement).checked);
+    });
+
+  container
+    .querySelector<HTMLInputElement>('[data-action="toggle-prosody"]')
+    ?.addEventListener("change", (event) => {
+      callbacks.onToggleUseProsody((event.target as HTMLInputElement).checked);
+    });
 
   container.querySelector('[data-action="conflict-cancel"]')?.addEventListener("click", () => {
     callbacks.onResolveConflict("cancel");

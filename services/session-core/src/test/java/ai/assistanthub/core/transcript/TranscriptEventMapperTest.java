@@ -28,7 +28,8 @@ class TranscriptEventMapperTest {
                 120,
                 3.2,
                 0,
-                Instant.parse("2026-07-22T12:00:00Z"));
+                Instant.parse("2026-07-22T12:00:00Z"),
+                null);
 
         HubEvent hubEvent = mapper.toHubEvent(event, sessionId);
 
@@ -65,7 +66,8 @@ class TranscriptEventMapperTest {
                 80,
                 null,
                 null,
-                Instant.parse("2026-07-22T12:00:01Z"));
+                Instant.parse("2026-07-22T12:00:01Z"),
+                null);
 
         HubEvent hubEvent = mapper.toHubEvent(event, sessionId);
 
@@ -77,15 +79,47 @@ class TranscriptEventMapperTest {
     }
 
     @Test
+    void preservesOptionalProsodyInPayload() {
+        UUID sessionId = UUID.randomUUID();
+        TranscriptEventV2 event = new TranscriptEventV2(
+                "transcript.final.v2",
+                "sess-1",
+                "sys-1",
+                "Sistema",
+                "system",
+                new TranscriptEventV2.Device(null, null, null),
+                "voce ja usou spring",
+                "pt",
+                0.9,
+                100,
+                1.0,
+                0,
+                Instant.parse("2026-07-22T12:00:02Z"),
+                java.util.Map.of(
+                        "questionScore", 0.78,
+                        "contour", "rising",
+                        "f0EndSlopeSemitones", 2.1));
+
+        HubEvent hubEvent = mapper.toHubEvent(event, sessionId);
+
+        assertThat(hubEvent.payload()).containsKey("prosody");
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> prosody =
+                (java.util.Map<String, Object>) hubEvent.payload().get("prosody");
+        assertThat(prosody).containsEntry("questionScore", 0.78);
+        assertThat(prosody).containsEntry("contour", "rising");
+    }
+
+    @Test
     void distinctChannelsProduceIndependentHubEvents() {
         UUID sessionId = UUID.randomUUID();
         Instant now = Instant.parse("2026-07-22T12:00:02Z");
         TranscriptEventV2 micEvent = new TranscriptEventV2(
                 "transcript.final.v2", "sess-1", "mic", "Mic", "microphone",
-                new TranscriptEventV2.Device(1, "Mic", null), "mesmo texto", null, null, 50, null, null, now);
+                new TranscriptEventV2.Device(1, "Mic", null), "mesmo texto", null, null, 50, null, null, now, null);
         TranscriptEventV2 systemEvent = new TranscriptEventV2(
                 "transcript.final.v2", "sess-1", "system", "System", "system",
-                new TranscriptEventV2.Device(null, null, null), "mesmo texto", null, null, 50, null, null, now);
+                new TranscriptEventV2.Device(null, null, null), "mesmo texto", null, null, 50, null, null, now, null);
 
         HubEvent micHubEvent = mapper.toHubEvent(micEvent, sessionId);
         HubEvent systemHubEvent = mapper.toHubEvent(systemEvent, sessionId);

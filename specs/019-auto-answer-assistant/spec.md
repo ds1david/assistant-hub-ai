@@ -33,6 +33,11 @@ Defaults adotados nesta spec a partir do pedido do usuário e do estado do produ
 - Q: Como nasce a sessão ativa no shell? → A: Shell **lista sessões** disponíveis e o operador **escolhe** qual reabrir **ou** criar nova.
 - Q: Preferências do Assistente além do automático (origens, modo de entrada)? → A: Persistir **tudo por sessão** (automático, origens de disparo, modo de entrada); **não** como preferência global do app. Sessão nova ou sem preferências → defaults da spec.
 
+### Session 2026-07-25 (023 question-detection-quality)
+
+- **019 FR-004** (heurística lexical canônica original desta spec) fica **superseded no shell** pela **FR-002** de `specs/023-issue-52-question-detection-quality/` (imperativos de entrevista, vocativo, word boundary, segmentos após `.!`). Orquestração de turns, conflito cancel/wait, rota `live-answer` e defaults de privacidade (auto off) **permanecem** definidos aqui.
+- Preferências adicionais (`interviewMode`, `useProsody`, `prosodyThreshold`) e gate multimodal: ver 023.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Ver respostas automáticas no shell a partir do transcript (Priority: P1)

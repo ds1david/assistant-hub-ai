@@ -11,6 +11,19 @@ pub struct AssistantSessionPreferences {
     pub auto_enabled: bool,
     pub enabled_source_types: Vec<String>,
     pub input_mode: String,
+    /// 023 FR-004: every Final system ≥8 is a candidate when true.
+    #[serde(default)]
+    pub interview_mode: bool,
+    /// 023 FR-006: use optional prosody.questionScore on Final events.
+    #[serde(default)]
+    pub use_prosody: bool,
+    /// [0.0, 1.0]; default 0.65 (no dedicated UI control in v1).
+    #[serde(default = "default_prosody_threshold")]
+    pub prosody_threshold: f64,
+}
+
+fn default_prosody_threshold() -> f64 {
+    0.65
 }
 
 impl Default for AssistantSessionPreferences {
@@ -19,6 +32,9 @@ impl Default for AssistantSessionPreferences {
             auto_enabled: false,
             enabled_source_types: vec!["system".to_string()],
             input_mode: "question-plus-recent-context".to_string(),
+            interview_mode: false,
+            use_prosody: false,
+            prosody_threshold: default_prosody_threshold(),
         }
     }
 }
@@ -106,6 +122,9 @@ mod tests {
                 auto_enabled: true,
                 enabled_source_types: vec!["system".to_string(), "microphone".to_string()],
                 input_mode: "question-only".to_string(),
+                interview_mode: true,
+                use_prosody: false,
+                prosody_threshold: 0.65,
             },
         )
         .unwrap();
@@ -116,6 +135,9 @@ mod tests {
                 auto_enabled: false,
                 enabled_source_types: vec!["microphone".to_string()],
                 input_mode: "question-plus-recent-context".to_string(),
+                interview_mode: false,
+                use_prosody: true,
+                prosody_threshold: 0.8,
             },
         )
         .unwrap();
@@ -124,9 +146,34 @@ mod tests {
         let t = get_prefs(&path, "T");
         assert!(s.auto_enabled);
         assert_eq!(s.input_mode, "question-only");
+        assert!(s.interview_mode);
         assert!(!t.auto_enabled);
         assert_eq!(t.enabled_source_types, vec!["microphone".to_string()]);
+        assert!(t.use_prosody);
+        assert!((t.prosody_threshold - 0.8).abs() < f64::EPSILON);
 
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn legacy_json_without_new_fields_deserializes_defaults() {
+        let path = temp_path("legacy.json");
+        let _ = fs::remove_file(&path);
+        let raw = r#"{
+          "bySessionId": {
+            "S": {
+              "autoEnabled": true,
+              "enabledSourceTypes": ["system"],
+              "inputMode": "question-only"
+            }
+          }
+        }"#;
+        fs::write(&path, raw).unwrap();
+        let prefs = get_prefs(&path, "S");
+        assert!(prefs.auto_enabled);
+        assert!(!prefs.interview_mode);
+        assert!(!prefs.use_prosody);
+        assert!((prefs.prosody_threshold - 0.65).abs() < f64::EPSILON);
         let _ = fs::remove_file(&path);
     }
 }
