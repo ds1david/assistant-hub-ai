@@ -155,6 +155,17 @@ export function getShellConfig(): Promise<ShellConfig> {
   return invoke("get_shell_config");
 }
 
+export interface HttpHealthProbe {
+  ok: boolean;
+  statusCode?: number | null;
+  detail: string;
+}
+
+/** Probe any HTTP health URL (session-core / STT). Redacted summary only. */
+export function probeHttpHealth(url: string): Promise<HttpHealthProbe> {
+  return invoke("probe_http_health", { url });
+}
+
 // ---------------------------------------------------------------------------------------
 // AI Provider Hub (R6, issue #37, US3) — espelha ai.assistanthub.core.provider.* do
 // session-core (ver specs/015-issue-37-ai-provider-hub/contracts/ai-provider-api.md).
