@@ -1,4 +1,5 @@
-// Ações de agent testáveis sem Tauri (020 / FR-002, FR-009, FR-016).
+// Ações de agent testáveis sem Tauri (020 / 021 FR-008–FR-011).
+// onSessionSelected: 020 FR-009 / 021 FR-011 (select ≠ restart).
 
 export interface AgentProcessActions {
   start: (sessionId: string, profilePath: string) => Promise<unknown>;

@@ -44,6 +44,11 @@ import {
   resolveAssistantEmptyKind,
   withActiveGuidance,
 } from "./session-alignment";
+import {
+  afterCreateSuccess,
+  isSelectableSessionId,
+  reconcileActiveSessionAfterList,
+} from "./session-selection";
 
 const STATUS_POLL_MS = 5000;
 const FEED_POLL_MS = 2000;
@@ -231,7 +236,10 @@ function paintSessionPicker(): void {
 }
 
 export async function selectSession(sessionId: string): Promise<void> {
-  // FR-009: troca de sessão NÃO reinicia o agent (onSessionSelected não chama stop/start).
+  // 020 FR-009 / 021 FR-011: troca de sessão NÃO reinicia o agent.
+  if (!isSelectableSessionId(sessionId)) {
+    return;
+  }
   onSessionSelected(sessionId, (id) => {
     activeSessionId = id;
   });
@@ -264,7 +272,8 @@ async function createAndSelectSession(): Promise<void> {
     coreReachable = true;
     sessionListError = null;
     await refreshSessionList();
-    await selectSession(session.id);
+    // 021 FR-005: create → active sem segundo clique (via afterCreateSuccess).
+    await afterCreateSuccess(session.id, selectSession);
     console.info("Sessão criada para o shell:", session.id);
   } catch (error) {
     coreReachable = false;
@@ -283,7 +292,18 @@ async function refreshSessionList(): Promise<void> {
     sessionList = await listSessions();
     sessionListError = null;
     coreReachable = true;
+    // 021 FR-006: orphan → null só em listagem bem-sucedida; paint reexibe «Nenhuma…» (FR-003).
+    const reconciled = reconcileActiveSessionAfterList(activeSessionId, sessionList);
+    if (reconciled !== activeSessionId) {
+      if (reconciled == null) {
+        transcriptPrimed = false;
+        lastTranscriptFeed = [];
+        assistantController.resetSessionState();
+      }
+      activeSessionId = reconciled;
+    }
   } catch (error) {
+    // Falha de list: não inventar lista; manter active prévio + erro (data-model refresh_fail).
     sessionList = [];
     sessionListError = `Falha ao listar sessões (session-core?): ${String(error)}`;
     coreReachable = false;
@@ -291,6 +311,7 @@ async function refreshSessionList(): Promise<void> {
   updateAssistantGuards();
   paintSessionPicker();
   paintAssistant();
+  void refreshAgentPanel();
 }
 
 async function pollSessionStatus(): Promise<void> {

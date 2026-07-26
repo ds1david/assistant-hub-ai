@@ -145,24 +145,26 @@ Instalador: `cargo tauri build --features gui` — artefatos em `src-tauri\targe
 
 **Sessão e Assistente (feature live-answer):**
 
-1. No shell, **liste / crie / selecione** a sessão (não há auto-create silencioso). Criar usa defaults `title=Sessão local` e `profileId=interview-technical`.
-2. **Regra do sessionId único (issue #47):** shell (sessão ativa), agent WASAPI e STT **devem** usar o **mesmo** identificador. Transcript e Assistente só reagem a eventos da sessão ativa da UI.
-3. **Preferir iniciar/reiniciar o agent pela UI** (painel Agent, modo Direct): o shell passa o UUID da sessão ativa. Se houver **mismatch** (sessão do agent ≠ ativa), use **«Reiniciar agent com sessão ativa»** (sem diálogo extra).
-4. **Selecionar outra sessão na lista NÃO reconfigura** um agent já em execução — só muda feed/Assistente; o banner de mismatch aparece até você reiniciar (UI) ou parar/iniciar manualmente.
-5. Agent iniciado **fora** do shell (PowerShell): o shell **não** encerra o processo externo. Pare manualmente e rode com o UUID da UI, por exemplo:
+1. No shell, **liste / crie / selecione** a sessão (não há auto-create silencioso). **Criar** torna a nova sessão **ativa** automaticamente; **clicar** um item da lista define a sessão ativa (id completo em «Sessão ativa»). Defaults de create: `title=Sessão local`, `profileId=interview-technical`.
+2. **`GET /api/sessions` (list-sessions) só reflete o session-core** (tipicamente UUID). **Não** inventa entradas a partir do agent.
+3. **Id só de caminho STT** no formato `session-YYYYMMDD-HHMMSS` (usado às vezes no agent) **não** faz a sessão aparecer sozinha na lista. Para feed/Assistente da UI, use o UUID da sessão do core (criar/selecionar na lista) e inicie o agent com **esse** id.
+4. **Regra do sessionId único (issues #47 / #49):** shell (sessão ativa), agent WASAPI e STT **devem** usar o **mesmo** identificador. Transcript e Assistente só reagem a eventos da sessão ativa da UI.
+5. **Preferir iniciar/reiniciar o agent pela UI** (painel Agent, modo Direct): o shell passa o UUID da sessão ativa — **não** gera um `session-YYYYMMDD-…` no lugar. Se houver **mismatch** (sessão do agent ≠ ativa), use **«Reiniciar agent com sessão ativa»** (sem diálogo extra).
+6. **Selecionar outra sessão na lista NÃO reconfigura** um agent já em execução — só muda feed/Assistente; o banner de mismatch aparece até você reiniciar (UI) ou parar/iniciar manualmente.
+7. Agent iniciado **fora** do shell (PowerShell): o shell **não** encerra o processo externo. Pare manualmente e rode com o UUID da UI, por exemplo:
 
 ```powershell
-# UUID = «Sessão ativa» no shell (data-testid session-active-id)
+# UUID = «Sessão ativa» no shell (data-testid session-active-id) — NÃO use só session-2026… se a intenção é a sessão da lista
 .\scripts\windows\run-audio-agent-foreground.ps1 `
   -Session <uuid-da-sessao-ativa> `
   -Profile samples\audio-profiles\<perfil>.yaml
 # ou: assistant-hub-audio run --session <uuid-da-sessao-ativa> --profile <perfil.yaml>
 ```
 
-6. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** reconhecidos como pergunta (partials **não** disparam — empty state «aguardando trecho final»).
-7. Preferências do Assistente: `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
+8. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** reconhecidos como pergunta (partials **não** disparam — empty state «aguardando trecho final»).
+9. Preferências do Assistente: `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
 
-**Verificação:** janela abre; lista de sessões via `GET /api/sessions`; agent e UI com o **mesmo** sessionId (sem banner de mismatch); salvar provedor **sem** HTTP 500; com automático on + final elegível → interação no Assistente (ou erro de provedor legível).
+**Verificação:** janela abre; lista de sessões via `GET /api/sessions` (só session-core); clique/criar define «Sessão ativa» com UUID completo; agent e UI com o **mesmo** sessionId (sem banner de mismatch); salvar provedor **sem** HTTP 500; com automático on + final elegível → interação no Assistente (ou erro de provedor legível).
 
 Config local: `%APPDATA%\ai.assistanthub.desktopshell\shell-config.json` (`sessionCoreBaseUrl`, padrão `http://localhost:8080`). Sample de rota `live-answer`: `samples/ai-providers/providers.example.yaml` (seed em `config/ai-providers.yaml` se o hub copiar o sample).
 
