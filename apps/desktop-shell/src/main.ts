@@ -171,15 +171,20 @@ async function refreshDiagnostics(): Promise<void> {
         detail: String(e),
         statusCode: null,
       })),
-      getAgentStatus().catch(() => ({
-        running: false,
-        controlMode: "Guided" as const,
-        guidanceCommand: "",
-        lastError: "falha ao ler status do agent",
-        agentSessionId: null,
-        agentSessionSource: "unknown" as const,
-        binarySource: "missing" as const,
-      })),
+      getAgentStatus().catch(
+        (): AgentStatus => ({
+          running: false,
+          controlMode: "Guided",
+          guidanceCommand: "",
+          lastError: "falha ao ler status do agent",
+          agentSessionId: null,
+          agentSessionSource: "unknown",
+          binarySource: "missing",
+          binaryPath: null,
+          agentVersion: null,
+          healthy: false,
+        }),
+      ),
     ]);
     const snapshot: DiagnosticSnapshot = buildDiagnosticSnapshot({
       sessionCoreBaseUrl: coreUrl,
