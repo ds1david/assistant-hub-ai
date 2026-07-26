@@ -3,6 +3,8 @@
 Filled for issue #39 (release hardening pós R1–R6).  
 Template: [checklist-template.md](./checklist-template.md)
 
+**Atualizado em 2026-07-26** após merges #57 (R5 sidecar) e #58 (R6 breaker/stream) em `main`.
+
 ---
 
 ## 1. Metadata
@@ -10,9 +12,9 @@ Template: [checklist-template.md](./checklist-template.md)
 | Field | Value |
 |-------|-------|
 | Version (SemVer) | `0.2.0` |
-| Target commit SHA (`main`) | _fill after merge to main_ |
-| Date | 2026-07-25 |
-| Maintainer | release hardening (issue #39) |
+| Target commit SHA (`main`) | `adc1a4c37363085ce9712dee7d320d9be1ab2521` |
+| Date | 2026-07-26 |
+| Maintainer | release hardening (issue #39) + post-#58 audit |
 | Issue | #39 |
 
 ---
@@ -21,13 +23,15 @@ Template: [checklist-template.md](./checklist-template.md)
 
 | Job ID | Exists | Status | Evidence |
 |--------|--------|--------|----------|
-| `policy` | yes | _pending main_ | fill Actions URL after merge |
-| `java` | yes | _pending main_ | |
-| `transcription-python` | yes | _pending main_ | |
-| `windows-audio-agent-unit` | yes | _pending main_ | |
-| `windows-audio-agent-windows-smoke` | yes | _pending main_ | |
-| `compose` | yes | _pending main_ | |
-| `desktop-shell-smoke` | yes | _pending main_ | new job this release |
+| `policy` | yes | _confirm on Actions for `adc1a4c`_ | https://github.com/ds1david/assistant-hub-ai/actions |
+| `java` | yes | _confirm on Actions_ | |
+| `transcription-python` | yes | _confirm on Actions_ | |
+| `windows-audio-agent-unit` | yes | _confirm on Actions_ | |
+| `windows-audio-agent-windows-smoke` | yes | _confirm on Actions_ | |
+| `compose` | yes | _confirm on Actions_ | |
+| `desktop-shell-smoke` | yes | _confirm on Actions_ | |
+
+Local smoke (2026-07-26): `check-version.sh` pass; `session-core` subset breaker/stream + `SessionRepositoryTest` pass; `cargo test --lib` desktop-shell 37 pass.
 
 ---
 
@@ -39,8 +43,8 @@ Template: [checklist-template.md](./checklist-template.md)
 
 | Check | Result |
 |-------|--------|
-| `check-version.sh` | **pass** on feature branch after bump to 0.2.0 |
-| Notes | Points: `VERSION`, README `## Versão`, FastAPI, agent pyproject + `__init__`, CI assert |
+| `check-version.sh` | **pass** on `main` @ `adc1a4c` |
+| Notes | `VERSION`, README, FastAPI, agent pyproject + `__init__`, CI assert all `0.2.0` |
 
 ---
 
@@ -48,8 +52,12 @@ Template: [checklist-template.md](./checklist-template.md)
 
 | ID | Description | Status | Evidence path | Notes |
 |----|-------------|--------|---------------|-------|
-| `SF-020-T024` | Process-capture manual Windows (specs/009 T024) | **gap** | _(none)_ | Do not invent PASS |
-| `DESKTOP-T033` | Desktop GUI Windows validation (specs/014 T033) | **gap** | _(none)_ | Do not invent PASS |
+| `SF-020-T024` | Process-capture manual Windows | **gap** | _(none)_ | specs/009-sf-020 T024 |
+| `DESKTOP-T033` | Desktop GUI Windows validation | **gap** | _(none)_ | specs/014 T033/T037 |
+| `R5-SIDECAR-VAL` | Sidecar packaging Windows | **gap** | `docs/validation/r5-audio-agent-sidecar.md` template only | specs/025 residual |
+| `SF-015-HW` | Hardware matrix residual | **gap** | docs/validation/sf-015-* partial | Bluetooth BLOCKED; reboot/hot-plug cases open |
+| `SF-018/019-MANUAL` | Windows revalidation hot-plug | **gap** | docs/validation partial | 006 T033, 009/010 reval |
+| `TAG-v0.2.0` | Annotated tag on main | **gap** | — | Human gate T021 |
 
 ---
 
@@ -57,8 +65,13 @@ Template: [checklist-template.md](./checklist-template.md)
 
 | ID | Summary | Tracking | Issue / won’t-fix |
 |----|---------|----------|---------------------|
-| `InvocationResult-sourceType` | `sourceType` / InvocationResult consistency | `issue` | https://github.com/ds1david/assistant-hub-ai/issues/40 |
-| `frontend-vite-audit` | npm audit / Vite major | `issue` + won’t major **this tag** (0.2.0); **follow-up #41 resolved** on feature branch | https://github.com/ds1david/assistant-hub-ai/issues/41 — tag 0.2.0 kept no major; post-tag upgrade + evidence `docs/validation/issue-41-frontend-npm-audit.md` |
+| `InvocationResult-sourceType` | `sourceType` consistency | **resolved** in product | #40 merged |
+| `frontend-vite-audit` | npm audit / Vite | **resolved** post-tag path | #41; evidence `docs/validation/issue-41-frontend-npm-audit.md` |
+| `R5-remaining` | tray, secure store OS, signed update, diag GPU | open | specs/002 |
+| `R6-remaining` | DPAPI, NIM presets, `/v1/models`, tokens/cost metrics, privacy-by-profile | open | specs/003 |
+| `R3-plus` | semantic index, search, decisions/actions | open | roadmap R3 beyond #29 |
+| `R4` | Visual context | open | no spec yet |
+| `R7` | Ecosystem | open | no spec yet |
 
 ---
 
@@ -66,9 +79,10 @@ Template: [checklist-template.md](./checklist-template.md)
 
 | Check | Result |
 |-------|--------|
-| `.gitignore` Memory Hub paths | **yes** (root + module + `**/memory-hub.db`) |
-| No tracked memory-hub db | **yes** (`git ls-files` empty for those) |
-| `config/ai-providers.yaml` not committed | **yes** (gitignored) |
+| `.gitignore` Memory Hub paths | **yes** |
+| No tracked memory-hub db | **yes** |
+| `config/ai-providers.yaml` not committed | **yes** |
+| PRs #57 / #58 on main | **yes** |
 
 ---
 
@@ -78,13 +92,20 @@ Template: [checklist-template.md](./checklist-template.md)
 |----------|---------|
 | README “Fluxo mínimo (release)” | yes |
 | `docs/release/min-flow.md` | yes |
-| Three pillars required | yes |
 
 ---
 
 ## 8. Tag sequence
 
-See template §8. Tag `v0.2.0` only after merge to `main` + CI green + Ready YES.
+See template §8. Tag `v0.2.0` only after CI green on `adc1a4c` (or later main) + Ready YES.
+
+```bash
+git checkout main && git pull
+./scripts/release/check-version.sh
+# confirm CI green for adc1a4c
+git tag -a v0.2.0 -m "Assistant Hub AI 0.2.0"
+git push origin v0.2.0
+```
 
 ---
 
@@ -92,5 +113,5 @@ See template §8. Tag `v0.2.0` only after merge to `main` + CI green + Ready YES
 
 | Question | Answer |
 |----------|--------|
-| Ready for tag? | **NO** — wait for human merge to `main`, green CI on that SHA, then set YES |
-| Blockers | Merge + CI evidence on `main`; then human `git tag -a v0.2.0` + push |
+| Ready for tag? | **NO** — confirm CI green on SHA + human tag; manual Windows gaps explicit (do not invent PASS) |
+| Blockers | Actions green on `adc1a4c`; optional but recommended: record Actions URLs in §2; human tag T021 |

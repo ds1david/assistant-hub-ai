@@ -1,1 +1,4 @@
-{"feature_directory":"specs/026-r6-circuit-breaker-streaming"}
+{
+  "feature_directory": "specs/026-r6-circuit-breaker-streaming",
+  "note": "main includes through 026 (PR #58). Next product slices: remaining 002/003 or R3+/R4."
+}
