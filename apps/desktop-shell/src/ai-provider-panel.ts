@@ -33,6 +33,7 @@ const ERROR_TYPE_LABELS: Record<InvocationErrorType, string> = {
   RATE_LIMITED: "rate limit",
   GENERIC: "erro genérico",
   CAPABILITY_MISMATCH: "capacidade não suportada",
+  CIRCUIT_OPEN: "circuit breaker aberto",
 };
 
 export function renderAiProviderPanel(
