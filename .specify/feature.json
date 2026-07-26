@@ -1,4 +1,4 @@
 {
-  "feature_directory": "specs/030-issue-65-r3-memory-intelligence",
-  "note": "Epic #63. #64 done. #65 P0 implemented (030). Next: #66 release, #67 diagnostics, #68 R4. #65 P1 embeddings/cite remaining."
+  "feature_directory": "specs/031-issue-66-r5-release-hardening",
+  "note": "Epic #63. Done: #64 #65. Active: #66 release. Next: #67 diagnostics, #68 R4."
 }

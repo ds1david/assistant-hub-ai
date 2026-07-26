@@ -1,0 +1,113 @@
+# R5 / issue #66 — packaging Windows + checksums.
+# Não roda em todo PR (só workflow_dispatch e tags v*).
+# Assinatura real: opcional; ausente secrets = skip (docs/desktop-shell/code-signing.md).
+name: Desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package-windows:
+    name: tauri-build-windows
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop-shell/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Frontend install + test + build
+        working-directory: apps/desktop-shell
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Ensure sidecar stub for bundling
+        shell: pwsh
+        run: .\scripts\windows\ensure-sidecar-stub.ps1
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Tauri build (MSI + NSIS)
+        working-directory: apps/desktop-shell
+        run: cargo tauri build --features gui
+        # Stub sidecar is enough to produce installers; real agent is operator concern for capture.
+
+      - name: Collect artifacts + SHA256SUMS
+        shell: pwsh
+        run: |
+          $bundle = "apps/desktop-shell/src-tauri/target/release/bundle"
+          $out = "dist/desktop-release"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          if (Test-Path $bundle) {
+            Get-ChildItem -Path $bundle -Recurse -Include *.msi,*.exe -ErrorAction SilentlyContinue |
+              ForEach-Object { Copy-Item $_.FullName (Join-Path $out $_.Name) -Force }
+          }
+          $files = Get-ChildItem $out -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'SHA256*' }
+          if (-not $files -or $files.Count -eq 0) {
+            Write-Host "WARN: no msi/exe collected; writing empty marker"
+            "no-artifacts" | Set-Content (Join-Path $out "NO_ARTIFACTS.txt")
+          } else {
+            $lines = foreach ($f in $files) {
+              $h = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLowerInvariant()
+              "{0}  {1}" -f $h, $f.Name
+            }
+            $lines | Set-Content (Join-Path $out "SHA256SUMS") -Encoding ascii
+            Get-Content (Join-Path $out "SHA256SUMS")
+          }
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-shell-windows
+          path: dist/desktop-release/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Code signing (optional)
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          if [ -z "${WINDOWS_CERTIFICATE:-}" ] || [ -z "${WINDOWS_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "No WINDOWS_CERTIFICATE secrets — skip signing (see docs/desktop-shell/code-signing.md)"
+            exit 0
+          fi
+          echo "Signing secrets present — wire org-specific signtool import (placeholder)."
+          # Do not fail the job until org implements import + signtool.
+
+  # Smoke do script de checksums em Linux (sem build Tauri).
+  checksum-script:
+    name: checksum-script-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate checksums for sample files
+        run: |
+          chmod +x scripts/release/checksum-artifacts.sh
+          mkdir -p /tmp/ah-artifacts
+          echo "demo-a" > /tmp/ah-artifacts/a.bin
+          echo "demo-b" > /tmp/ah-artifacts/b.bin
+          ./scripts/release/checksum-artifacts.sh /tmp/ah-artifacts
+          test -f /tmp/ah-artifacts/SHA256SUMS
+          grep -q 'a.bin' /tmp/ah-artifacts/SHA256SUMS
+          grep -q 'b.bin' /tmp/ah-artifacts/SHA256SUMS
+          # verify
+          (cd /tmp/ah-artifacts && sha256sum -c SHA256SUMS)

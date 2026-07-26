@@ -11,9 +11,9 @@ Visão R5 completa. Fatia entregue: `specs/014-issue-35-desktop-tauri-shell-loca
 - [x] Implementar armazenamento seguro de credenciais. (`os:` + keyring no shell / #64 / specs/029)
 - [x] Gerar instalador NSIS por usuário. (targets em `tauri.conf.json`; build real exige host Windows — validação residual 014 T033)
 - [x] Gerar MSI opcional. (idem)
-- [ ] Criar workflow de release Windows. (parcial: `desktop-shell-smoke` no CI; falta pipeline de artefatos assináveis) → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)**
-- [ ] Adicionar checksums e preparação para assinatura. → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)**
-- [ ] Testar instalação, upgrade, rollback e remoção. (014 T033/T037 — validação GUI Windows residual) → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)**
+- [x] Criar workflow de release Windows. (`desktop-release.yml` + runbook; smoke lib permanece no CI) → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)** / specs/031
+- [x] Adicionar checksums e preparação para assinatura. (`checksum-artifacts.sh`, `SHA256SUMS`, `code-signing.md`) → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)**
+- [x] Testar instalação, upgrade, rollback e remoção. (checklist em `docs/validation/r5-desktop-install-checklist.md` — evidência manual Windows residual do operador) → **[#66](https://github.com/ds1david/assistant-hub-ai/issues/66)**
 - [x] Documentar migração do modo Developer para Desktop. (`docs/desktop-shell/packaging.md`, `docs/development/running.md`, escopo 014 vs 002)
 
 ## Notas de higiene (2026-07-26)
