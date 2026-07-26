@@ -7,9 +7,82 @@
   <style>
     :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
     body { margin: 0; background: #101215; color: #f4f6f8; }
-    header { padding: 20px 28px; border-bottom: 1px solid #2b3038; display:flex; justify-content:space-between; align-items:center; }
+    header {
+      padding: 16px 28px;
+      border-bottom: 1px solid #2b3038;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    header .brand { min-width: 200px; }
     h1 { margin: 0; font-size: 20px; }
-    #status { font-size: 13px; color: #aab2bd; }
+    .header-meta {
+      flex: 1 1 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      font-size: 12px;
+      color: #c5ccd6;
+    }
+    .header-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .header-label {
+      color: #7d8793;
+      flex: 0 0 auto;
+    }
+    #session-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      max-width: min(100%, 48rem);
+      user-select: all;
+    }
+    #session-id.is-empty { color: #7d8793; user-select: none; }
+    #session-copy {
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #3a414b;
+      background: #1c2128;
+      color: #f4f6f8;
+      cursor: pointer;
+    }
+    #session-copy:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    #session-copy-feedback {
+      font-size: 11px;
+      color: #8ab4f8;
+      min-height: 1em;
+    }
+    #session-copy-feedback.is-error { color: #f28b82; }
+    #session-multi {
+      color: #aab2bd;
+      font-size: 11px;
+    }
+    #session-multi:empty { display: none; }
+    #session-profile, #stt-base-url {
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      color: #aab2bd;
+    }
+    #status {
+      font-size: 13px;
+      color: #aab2bd;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
     main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; padding: 22px; }
     section { background: #171a1f; border: 1px solid #2b3038; border-radius: 12px; min-height: 55vh; overflow: hidden; }
     section h2 { margin: 0; padding: 14px 16px 4px; font-size: 15px; }
@@ -26,19 +99,141 @@
 </head>
 <body>
 <header>
-  <h1>Assistant Hub AI · Streaming Foundation</h1>
+  <div class="brand">
+    <h1>Assistant Hub AI · Streaming Foundation</h1>
+  </div>
+  <div class="header-meta" data-testid="header-meta">
+    <div class="header-row">
+      <span class="header-label">sessionId</span>
+      <span id="session-id" data-testid="session-id" class="is-empty">aguardando sessão</span>
+      <button type="button" id="session-copy" data-testid="session-copy" disabled>Copiar</button>
+      <span id="session-copy-feedback" data-testid="session-copy-feedback" aria-live="polite"></span>
+      <span id="session-multi" data-testid="session-multi" hidden></span>
+    </div>
+    <div class="header-row">
+      <span class="header-label">profile</span>
+      <span id="session-profile" data-testid="session-profile">Profile: definido no agent (--profile)</span>
+    </div>
+    <div class="header-row">
+      <span class="header-label">STT</span>
+      <span id="stt-base-url" data-testid="stt-base-url"></span>
+    </div>
+  </div>
   <span id="status">conectando…</span>
 </header>
 <div id="waiting">Aguardando canais de áudio. Inicie o agente Windows com um perfil.</div>
 <main id="channels"></main>
 <footer>Cada painel representa um endpoint Windows independente. Fontes que compartilham o mesmo dispositivo de saída continuam misturadas no loopback desse endpoint.</footer>
 <script>
+  // Espelha app/header_session_state.py (política canônica — analyze U1 / FR-010/014).
   const statusEl = document.getElementById('status');
   const channelsEl = document.getElementById('channels');
   const waitingEl = document.getElementById('waiting');
+  const sessionIdEl = document.getElementById('session-id');
+  const sessionCopyBtn = document.getElementById('session-copy');
+  const sessionCopyFeedback = document.getElementById('session-copy-feedback');
+  const sessionMultiEl = document.getElementById('session-multi');
+  const sessionProfileEl = document.getElementById('session-profile');
+  const sttBaseUrlEl = document.getElementById('stt-base-url');
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   const sessions = new Set();
+  /** @type {string[]} first-seen order */
+  const observedSessionIds = [];
+  let primarySessionId = null;
   let retry;
+  let copyFeedbackTimer;
+
+  const EMPTY_SESSION = 'aguardando sessão';
+  const PROFILE_NOTE = 'Profile: definido no agent (--profile)';
+
+  function normalizeSessionId(raw) {
+    if (raw == null) return null;
+    const value = String(raw).trim();
+    return value ? value : null;
+  }
+
+  function copyEnabled(primary) {
+    return Boolean(primary && String(primary).trim());
+  }
+
+  /** Observe sessionId from transcript feed — mirrors HeaderSessionState.observe */
+  function observeSessionId(raw) {
+    const sid = normalizeSessionId(raw);
+    if (!sid) return false;
+    let changed = false;
+    if (!observedSessionIds.includes(sid)) {
+      observedSessionIds.push(sid);
+      changed = true;
+    }
+    if (primarySessionId !== sid) {
+      primarySessionId = sid;
+      changed = true;
+    }
+    sessions.add(sid);
+    return changed;
+  }
+
+  function multiLabel() {
+    if (observedSessionIds.length <= 1) return null;
+    return `${observedSessionIds.length} sessões`;
+  }
+
+  function paintHeaderSession() {
+    if (primarySessionId) {
+      sessionIdEl.textContent = primarySessionId;
+      sessionIdEl.classList.remove('is-empty');
+      sessionCopyBtn.disabled = !copyEnabled(primarySessionId);
+    } else {
+      sessionIdEl.textContent = EMPTY_SESSION;
+      sessionIdEl.classList.add('is-empty');
+      sessionCopyBtn.disabled = true;
+    }
+    const multi = multiLabel();
+    if (multi) {
+      sessionMultiEl.hidden = false;
+      sessionMultiEl.textContent = multi;
+    } else {
+      sessionMultiEl.hidden = true;
+      sessionMultiEl.textContent = '';
+    }
+  }
+
+  function setCopyFeedback(message, isError) {
+    sessionCopyFeedback.textContent = message || '';
+    sessionCopyFeedback.classList.toggle('is-error', Boolean(isError));
+    clearTimeout(copyFeedbackTimer);
+    if (message) {
+      copyFeedbackTimer = setTimeout(() => {
+        sessionCopyFeedback.textContent = '';
+        sessionCopyFeedback.classList.remove('is-error');
+      }, 2000);
+    }
+  }
+
+  async function copyPrimarySessionId() {
+    if (!copyEnabled(primarySessionId)) return;
+    const value = primarySessionId;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        throw new Error('clipboard unavailable');
+      }
+      setCopyFeedback('copiado', false);
+    } catch {
+      setCopyFeedback('falha ao copiar', true);
+    }
+  }
+
+  sessionCopyBtn.addEventListener('click', () => {
+    void copyPrimarySessionId();
+  });
+
+  // FR-011: URL base = document origin (no secrets).
+  sttBaseUrlEl.textContent = location.origin;
+  // FR-006: profile note only this slice (no invented name).
+  sessionProfileEl.textContent = PROFILE_NOTE;
+  paintHeaderSession();
 
   function safeId(value) {
     return `channel-${value.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
@@ -54,6 +249,7 @@
     section.id = id;
     const deviceName = data.device?.name || 'dispositivo não informado';
     const source = data.sourceType === 'microphone' ? 'entrada' : 'loopback de saída';
+    // Channel cards: label / device / metrics only — no sessionId or profile (FR-007).
     section.innerHTML = `
       <h2></h2>
       <div class="device"></div>
@@ -68,11 +264,15 @@
   function connect() {
     const ws = new WebSocket(`${protocol}://${location.host}/ws/transcripts`);
     ws.onopen = () => { statusEl.textContent = 'conectado'; clearTimeout(retry); };
+    // Reconnect must NOT clear observedSessionIds / primarySessionId (analyze A1).
     ws.onclose = () => { statusEl.textContent = 'reconectando…'; retry = setTimeout(connect, 1500); };
     ws.onerror = () => ws.close();
     ws.onmessage = event => {
       const data = JSON.parse(event.data);
-      sessions.add(data.sessionId);
+      if (data.sessionId != null) {
+        observeSessionId(data.sessionId);
+        paintHeaderSession();
+      }
       const target = ensureChannel(data);
       target.querySelector('.empty')?.remove();
       const item = document.createElement('div');

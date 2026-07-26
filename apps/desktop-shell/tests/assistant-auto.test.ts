@@ -57,6 +57,31 @@ describe("looksLikeQuestion (FR-004)", () => {
     expect(looksLikeQuestion("How does garbage collection work")).toBe(true);
   });
 
+  it("detects interview-style imperatives (pt)", () => {
+    expect(looksLikeQuestion("Me conte sobre um projeto relevante com Java Spring")).toBe(true);
+    expect(looksLikeQuestion("Me descreva uma API REST que você implementou")).toBe(true);
+    expect(looksLikeQuestion("Me fala de uma API REST que você construiu")).toBe(true);
+    expect(looksLikeQuestion("Descreva o fluxo de autenticação da API")).toBe(true);
+    expect(looksLikeQuestion("Em que sistema você atuava na Claro")).toBe(true);
+  });
+
+  it("detects vocative + interview opener", () => {
+    expect(looksLikeQuestion("David, me conte sobre um projeto relevante")).toBe(true);
+    expect(looksLikeQuestion("David, me descreva uma API REST com Spring")).toBe(true);
+  });
+
+  it("detects question after a short lead-in sentence", () => {
+    expect(
+      looksLikeQuestion("Claro, sem problema. Me descreva uma API REST com Java e Spring"),
+    ).toBe(true);
+  });
+
+  it("detects english interview openers", () => {
+    expect(looksLikeQuestion("Tell me about a relevant project you led")).toBe(true);
+    expect(looksLikeQuestion("Describe an API you designed end to end")).toBe(true);
+    expect(looksLikeQuestion("Walk me through your design decisions")).toBe(true);
+  });
+
   it("rejects short or non-questions", () => {
     expect(looksLikeQuestion("ok")).toBe(false);
     expect(looksLikeQuestion("sim")).toBe(false);
@@ -64,6 +89,9 @@ describe("looksLikeQuestion (FR-004)", () => {
     expect(looksLikeQuestion("Vamos seguir com o plano combinado")).toBe(false);
     expect(looksLikeQuestion("porque")).toBe(false); // < 8 chars after... actually "porque" is 6
     expect(looksLikeQuestion("abc?")).toBe(false); // < 8
+    expect(looksLikeQuestion("qualidade do serviço ficou estável no mês")).toBe(false);
+    expect(looksLikeQuestion("Claro, sem problema. Vamos seguir em frente")).toBe(false);
+    expect(looksLikeQuestion("Perfeito, vamos praticar exatamente essa saída")).toBe(false);
   });
 });
 

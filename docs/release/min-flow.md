@@ -136,7 +136,7 @@ Configure `sessionCoreBaseUrl` (padrão `http://localhost:8080`) no config do ap
 
 ### sessionId único (UI ↔ agent ↔ STT)
 
-Shell, agent WASAPI e STT devem usar o **mesmo** `sessionId` (UUID da sessão do **session-core** na UI). **list-sessions** (`GET /api/sessions`) só lista o core — string `session-YYYYMMDD-…` só no agent **não** aparece na lista sozinha. Preferir **Iniciar / Reiniciar agent com sessão ativa** no painel do shell (passa o UUID ativo). **Selecionar sessão na lista não reconfigura** agent já em execução — se divergir, o shell mostra mismatch (e CTA de reinício em modo Direct). Detalhes: [docs/development/running.md](../development/running.md) (seção Sessão e Assistente).
+Shell, agent WASAPI e STT devem usar o **mesmo** `sessionId` (UUID da sessão do **session-core** na UI). **list-sessions** (`GET /api/sessions`) só lista o core — string `session-YYYYMMDD-…` só no agent **não** aparece na lista sozinha. Preferir **Iniciar / Reiniciar agent com sessão ativa** no painel do shell (passa o UUID ativo). **Selecionar sessão na lista não reconfigura** agent já em execução — se divergir, o shell mostra mismatch (e CTA de reinício em modo Direct). No **dashboard Streaming Foundation** (`http://localhost:8001`), o **header** exibe o sessionId em uso com **Copiar** — use esse valor para alinhar agent/shell sem depender do log do PowerShell (issue #51). Detalhes: [docs/development/running.md](../development/running.md) (seção Sessão e Assistente + header STT).
 
 ### Critério “no ar”
 
