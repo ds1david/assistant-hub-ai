@@ -11,8 +11,8 @@ Visão R6 completa. Fatia entregue: `specs/015-issue-37-ai-provider-hub/` (+ `01
 - [ ] Criar presets Ollama e NVIDIA NIM. (parcial: Ollama/openai-compatible via perfil YAML de exemplo; presets NIM dedicados ainda não)
 - [ ] Implementar descoberta via `/v1/models` quando suportada.
 - [x] Criar teste de conexão com erros tipados. (API + UI + taxonomia de erros)
-- [ ] Implementar streaming e cancelamento. (cancel de invoke síncrono existe; streaming token-a-token não)
-- [ ] Implementar fallback e circuit breaker. (fallback de rota: feito em 015; circuit breaker: não)
+- [x] Implementar streaming e cancelamento. (`specs/026-r6-circuit-breaker-streaming/` — SSE `/invoke/stream` + cancel; sync cancel por timeout permanece)
+- [x] Implementar fallback e circuit breaker. (fallback 015; circuit breaker 026 por providerId)
 - [ ] Criar métricas de latência, tokens e custo informado. (latência no `InvocationResult`: parcial; tokens/custo: não)
 - [x] Criar UI de provedores e modelos. (`apps/desktop-shell/src/ai-provider-panel.ts`)
 - [x] Adicionar testes que garantem redação de chaves. (`SecretMaskingTest` e correlatos)

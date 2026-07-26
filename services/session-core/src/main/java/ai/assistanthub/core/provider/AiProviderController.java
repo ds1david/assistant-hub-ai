@@ -2,6 +2,7 @@ package ai.assistanthub.core.provider;
 
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,10 +16,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * REST do AI Provider Hub (FR-011/FR-012/FR-013) — ver
@@ -33,6 +39,7 @@ public class AiProviderController {
     private final ProviderRegistry registry;
     private final InvocationService invocationService;
     private final SecretResolver secretResolver;
+    private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
 
     public AiProviderController(
             ProviderRegistry registry, InvocationService invocationService, SecretResolver secretResolver) {
@@ -97,6 +104,60 @@ public class AiProviderController {
         return invocationService.invoke(
                 request.route(),
                 new InvocationRequest(request.sessionId(), request.channelId(), request.capability(), request.input()));
+    }
+
+    /**
+     * Streaming SSE (026): eventos {@code chunk} e terminal {@code done}/{@code error}.
+     * Desconexão do cliente cancela a geração (FR-007).
+     */
+    @PostMapping(value = "/invoke/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter invokeStream(@RequestBody InvokeRequest request) {
+        SseEmitter emitter = new SseEmitter(300_000L);
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        emitter.onCompletion(() -> cancelled.set(true));
+        emitter.onTimeout(() -> cancelled.set(true));
+        emitter.onError(ex -> cancelled.set(true));
+
+        InvocationRequest invocationRequest = new InvocationRequest(
+                request.sessionId(), request.channelId(), request.capability(), request.input());
+
+        streamExecutor.execute(() -> {
+            try {
+                invocationService.invokeStream(
+                        request.route(),
+                        invocationRequest,
+                        new StreamSink() {
+                            @Override
+                            public void onChunk(String text) {
+                                try {
+                                    emitter.send(SseEmitter.event().name("chunk").data(Map.of("text", text)));
+                                } catch (IOException e) {
+                                    cancelled.set(true);
+                                }
+                            }
+
+                            @Override
+                            public void onTerminal(InvocationResult result) {
+                                try {
+                                    String event = result.success() ? "done" : "error";
+                                    emitter.send(SseEmitter.event().name(event).data(result));
+                                    emitter.complete();
+                                } catch (IOException e) {
+                                    emitter.completeWithError(e);
+                                }
+                            }
+                        },
+                        cancelled::get);
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+        });
+        return emitter;
+    }
+
+    @GetMapping("/circuit-status")
+    public List<ProviderCircuitSnapshot> circuitStatus() {
+        return invocationService.circuitSnapshots();
     }
 
     /** Só usado para exibição — nunca o valor completo (FR-014): 3 primeiros + 4 últimos caracteres. */
