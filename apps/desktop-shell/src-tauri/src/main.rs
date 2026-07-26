@@ -249,6 +249,66 @@ fn stop_agent(state: State<AppState>) -> Result<(), String> {
     }
 }
 
+/// Lightweight HTTP health probe for diagnostics (#67). Never returns bodies with secrets
+/// (only status line + a few known-safe JSON keys).
+#[tauri::command]
+fn probe_http_health(url: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+    match client.get(&url).send() {
+        Ok(resp) => {
+            let code = resp.status().as_u16();
+            let ok = resp.status().is_success();
+            let body = resp.text().unwrap_or_default();
+            let summary = summarize_health_body(&body);
+            Ok(serde_json::json!({
+                "ok": ok,
+                "statusCode": code,
+                "detail": summary,
+            }))
+        }
+        Err(e) => Ok(serde_json::json!({
+            "ok": false,
+            "statusCode": null,
+            "detail": format!("error: {e}"),
+        })),
+    }
+}
+
+fn summarize_health_body(body: &str) -> String {
+    // Prefer compact JSON fields; never dump large blobs.
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+        let mut parts = Vec::new();
+        if let Some(s) = v.get("status").and_then(|x| x.as_str()) {
+            parts.push(format!("status={s}"));
+        }
+        if let Some(s) = v.get("model").and_then(|x| x.as_str()) {
+            parts.push(format!("model={s}"));
+        }
+        if let Some(s) = v.get("device").and_then(|x| x.as_str()) {
+            parts.push(format!("device={s}"));
+        }
+        if let Some(b) = v.get("modelLoaded").and_then(|x| x.as_bool()) {
+            parts.push(format!("modelLoaded={b}"));
+        }
+        if parts.is_empty() {
+            return "ok".to_string();
+        }
+        return parts.join(" ");
+    }
+    let t = body.trim();
+    if t.is_empty() {
+        return "empty body".to_string();
+    }
+    if t.len() > 120 {
+        format!("{}…", &t[..120])
+    } else {
+        t.to_string()
+    }
+}
+
 #[tauri::command]
 fn get_shell_config(state: State<AppState>) -> ShellConfig {
     state.config.lock().unwrap().clone()
@@ -469,6 +529,7 @@ fn main() {
             start_agent,
             stop_agent,
             get_shell_config,
+            probe_http_health,
             get_assistant_prefs,
             set_assistant_prefs,
             list_ai_providers,

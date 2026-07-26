@@ -9,10 +9,12 @@ import {
   secretStoreDelete,
   getSessionStatus,
   getSessionMemoryItems,
+  getShellConfig,
   getTranscriptFeed,
   invokeAiProvider,
   listAiProviders,
   listSessions,
+  probeHttpHealth,
   saveAiProvider,
   searchSessionMemory,
   setAiProviderEnabled,
@@ -29,6 +31,16 @@ import {
 import { AssistantAutoController } from "./assistant-auto";
 import { renderAssistantPanel } from "./assistant-panel";
 import { renderMemoryPanel, type MemoryPanelState } from "./memory-panel";
+import {
+  buildDiagnosticSnapshot,
+  DEFAULT_STT_BASE_URL,
+  formatDiagnosticReport,
+  type DiagnosticSnapshot,
+} from "./diagnostics";
+import {
+  renderDiagnosticsPanel,
+  type DiagnosticsPanelState,
+} from "./diagnostics-panel";
 import {
   DEFAULT_ASSISTANT_PREFS,
   clonePrefs,
@@ -101,6 +113,13 @@ let memoryPanelState: MemoryPanelState = {
   busy: false,
 };
 
+let diagnosticsState: DiagnosticsPanelState = {
+  snapshot: null,
+  busy: false,
+  error: null,
+  copyFeedback: null,
+};
+
 const assistantController = new AssistantAutoController({
   invoke: (input) => {
     if (!activeSessionId) {
@@ -113,6 +132,114 @@ const assistantController = new AssistantAutoController({
 
 function memoryPanelContainer(): HTMLElement {
   return document.getElementById("memory-panel") as HTMLElement;
+}
+
+function diagnosticsPanelContainer(): HTMLElement {
+  return document.getElementById("diagnostics-panel") as HTMLElement;
+}
+
+function paintDiagnosticsPanel(): void {
+  const el = diagnosticsPanelContainer();
+  if (!el) {
+    return;
+  }
+  renderDiagnosticsPanel(el, diagnosticsState, {
+    onRefresh: () => {
+      void refreshDiagnostics();
+    },
+    onCopyReport: () => {
+      void copyDiagnosticsReport();
+    },
+  });
+}
+
+async function refreshDiagnostics(): Promise<void> {
+  diagnosticsState = { ...diagnosticsState, busy: true, error: null, copyFeedback: null };
+  paintDiagnosticsPanel();
+  try {
+    const config = await getShellConfig();
+    const coreUrl = config.sessionCoreBaseUrl.replace(/\/$/, "");
+    const sttUrl = DEFAULT_STT_BASE_URL.replace(/\/$/, "");
+    const [coreProbe, sttProbe, agent] = await Promise.all([
+      probeHttpHealth(`${coreUrl}/actuator/health`).catch((e) => ({
+        ok: false,
+        detail: String(e),
+        statusCode: null,
+      })),
+      probeHttpHealth(`${sttUrl}/health`).catch((e) => ({
+        ok: false,
+        detail: String(e),
+        statusCode: null,
+      })),
+      getAgentStatus().catch(() => ({
+        running: false,
+        controlMode: "Guided" as const,
+        guidanceCommand: "",
+        lastError: "falha ao ler status do agent",
+        agentSessionId: null,
+        agentSessionSource: "unknown" as const,
+        binarySource: "missing" as const,
+      })),
+    ]);
+    const snapshot: DiagnosticSnapshot = buildDiagnosticSnapshot({
+      sessionCoreBaseUrl: coreUrl,
+      sttBaseUrl: sttUrl,
+      activeSessionId,
+      sessionCore: {
+        ok: coreProbe.ok,
+        detail: coreProbe.detail ?? (coreProbe.ok ? "ok" : "down"),
+      },
+      stt: {
+        ok: sttProbe.ok,
+        detail: sttProbe.detail ?? (sttProbe.ok ? "ok" : "down"),
+      },
+      agent: {
+        running: agent.running,
+        healthy: agent.healthy,
+        binarySource: agent.binarySource ?? null,
+        binaryPath: agent.binaryPath ?? null,
+        agentVersion: agent.agentVersion ?? null,
+        agentSessionId: agent.agentSessionId ?? null,
+        lastError: agent.lastError ?? null,
+      },
+      shellRunning: true,
+    });
+    diagnosticsState = {
+      snapshot,
+      busy: false,
+      error: null,
+      copyFeedback: null,
+    };
+  } catch (error) {
+    diagnosticsState = {
+      ...diagnosticsState,
+      busy: false,
+      error: String(error),
+    };
+  }
+  paintDiagnosticsPanel();
+}
+
+async function copyDiagnosticsReport(): Promise<void> {
+  if (!diagnosticsState.snapshot) {
+    return;
+  }
+  const text = formatDiagnosticReport(diagnosticsState.snapshot);
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // Fallback: no clipboard API
+      throw new Error("clipboard indisponível");
+    }
+    diagnosticsState = { ...diagnosticsState, copyFeedback: "Copiado" };
+  } catch {
+    diagnosticsState = {
+      ...diagnosticsState,
+      copyFeedback: "Falha ao copiar — selecione o relatório manualmente",
+    };
+  }
+  paintDiagnosticsPanel();
 }
 
 function sessionStatusContainer(): HTMLElement {
@@ -647,10 +774,12 @@ function bootstrap(): void {
   updateAssistantGuards();
   paintAssistant();
   paintMemoryPanel();
+  paintDiagnosticsPanel();
   paintSessionPicker();
   void refreshSessionList().then(() => {
     void refreshAgentPanel();
     void refreshAiProviderPanel();
+    void refreshDiagnostics();
   });
   setInterval(() => void pollSessionStatus(), STATUS_POLL_MS);
   setInterval(() => void pollTranscriptFeed(), FEED_POLL_MS);

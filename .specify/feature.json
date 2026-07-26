@@ -1,4 +1,4 @@
 {
-  "feature_directory": "specs/031-issue-66-r5-release-hardening",
-  "note": "Epic #63. Done: #64 #65. Active: #66 release. Next: #67 diagnostics, #68 R4."
+  "feature_directory": "specs/032-issue-67-shell-diagnostics",
+  "note": "Epic #63. Done: #64–#66. Active: #67 diagnostics. Next: #68 R4 visual."
 }
