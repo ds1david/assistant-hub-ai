@@ -59,21 +59,49 @@ export interface AssistantAutoDeps {
   createId?: () => string;
 }
 
-/** Prefixos canônicos FR-004 (case-insensitive no início do texto). */
+/**
+ * Prefixos canônicos FR-004 + imperativos típicos de entrevista/mock
+ * (case-insensitive no início do trecho ou de sentença).
+ * Ordem: mais longos primeiro para evitar match parcial acidental.
+ */
 const PT_PREFIXES = [
+  "será que",
+  "me descreva",
+  "me conte",
+  "me conta",
+  "me fale",
+  "me fala",
+  "me diga",
+  "me explique",
+  "pode me",
+  "pode descrever",
+  "pode explicar",
+  "pode contar",
+  "conte sobre",
+  "conte-me",
+  "conte me",
+  "descreva",
+  "explique",
+  "por que",
+  "porque",
+  "para que",
+  "pra que",
+  "em que",
   "o que",
-  "qual",
   "quais",
+  "qual",
   "quem",
   "quando",
   "onde",
-  "por que",
-  "porque",
   "como",
-  "será que",
 ] as const;
 
 const EN_PREFIXES = [
+  "tell me about",
+  "tell me",
+  "walk me through",
+  "describe",
+  "explain",
   "what",
   "which",
   "who",
@@ -90,10 +118,63 @@ const EN_PREFIXES = [
   "would ",
 ] as const;
 
+const ALL_PREFIXES: readonly string[] = [...PT_PREFIXES, ...EN_PREFIXES];
+
 export const MAX_CONTEXT_FINAL_SEGMENTS = 12;
 export const MAX_CONTEXT_CHARS = 4000;
 
-/** Heurística FR-004: ≥8 chars + (`?` ou prefixo canônico pt/en). */
+/** Remove vocativo curto no início: "David, me conte…" → "me conte…". */
+export function stripLeadingVocative(lower: string): string {
+  // Nome/apelido + vírgula (até ~40 chars de letras/espaços/hífen/apóstrofo).
+  const m = lower.match(/^[\p{L}][\p{L}\d\s.'-]{0,40},\s+/u);
+  if (m) {
+    return lower.slice(m[0].length);
+  }
+  return lower;
+}
+
+/** Candidatos de início: texto inteiro, sem vocativo, e após . ! */
+function questionStartCandidates(lower: string): string[] {
+  const out: string[] = [];
+  const push = (s: string) => {
+    const t = s.trim();
+    if (t.length > 0) {
+      out.push(t);
+      const stripped = stripLeadingVocative(t);
+      if (stripped !== t && stripped.length > 0) {
+        out.push(stripped);
+      }
+    }
+  };
+  push(lower);
+  for (const part of lower.split(/(?<=[.!])\s+/)) {
+    push(part);
+  }
+  return out;
+}
+
+function startsWithQuestionPrefix(candidate: string): boolean {
+  for (const p of ALL_PREFIXES) {
+    if (!candidate.startsWith(p)) {
+      continue;
+    }
+    // Prefixo com espaço final já impõe limite ("is ", "are ").
+    if (p.endsWith(" ")) {
+      return true;
+    }
+    const next = candidate.charAt(p.length);
+    // Limite de palavra: evita qual≠qualidade, how≠however, describe≠described.
+    if (next === "" || /[\s,?!:;.\-']/.test(next)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Heurística FR-004: ≥8 chars + (`?` ou prefixo canônico/entrevista pt/en
+ * no início do trecho, após vocativo, ou em nova sentença).
+ */
 export function looksLikeQuestion(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length < 8) {
@@ -103,13 +184,8 @@ export function looksLikeQuestion(text: string): boolean {
     return true;
   }
   const lower = trimmed.toLowerCase();
-  for (const p of PT_PREFIXES) {
-    if (lower.startsWith(p)) {
-      return true;
-    }
-  }
-  for (const p of EN_PREFIXES) {
-    if (lower.startsWith(p)) {
+  for (const candidate of questionStartCandidates(lower)) {
+    if (startsWithQuestionPrefix(candidate)) {
       return true;
     }
   }

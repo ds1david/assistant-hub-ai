@@ -104,7 +104,7 @@ No PowerShell **nativo** (parâmetros PowerShell: `-Session`, `-Profile` — **n
 cd \\wsl.localhost\Ubuntu-24.04\home\david\workspace\assistant-hub-ai
 
 .\scripts\windows\run-audio-agent-foreground.ps1 `
-  -Session teste `
+  -Session 7ef919e1-f5b8-47be-9140-2b466fd9fb34 `
   -Profile "\\wsl.localhost\Ubuntu-24.04\home\david\workspace\assistant-hub-ai\samples\audio-profiles\conference-cam-endpointid.yaml"
 ```
 
@@ -178,9 +178,11 @@ cd /home/david/workspace/assistant-hub-ai
 ./scripts/wsl/start-assistant-hub.sh --no-build
 ```
 
-- Browser STT: http://localhost:8001  
-- session-core: http://localhost:8080 (container; `./scripts/wsl/stop-session-core.sh` ou `compose.sh stop session-core`)  
+- Browser STT: http://localhost:8001
+- session-core: http://localhost:8080 (container; `./scripts/wsl/stop-session-core.sh` ou `compose.sh stop session-core`)
 - Shell (opcional): `cargo tauri dev --features gui` em `C:\src\...\apps\desktop-shell`
+
+**Header do dashboard Streaming Foundation (`:8001`):** o header fixo mostra o **sessionId** em uso (o mesmo dos eventos de transcript / path de áudio do agent), com ação **Copiar** para colar no `--session` ou no shell **sem** abrir o log do PowerShell. Também mostra a URL base do STT e uma nota de que o **profile** vem do agent (`run --profile …`). Use o id copiado para alinhar agent ↔ shell ↔ STT (issues #47 / #49 / #51).
 
 Alternativa a partir do PowerShell Windows (sobe Compose + agent):
 
