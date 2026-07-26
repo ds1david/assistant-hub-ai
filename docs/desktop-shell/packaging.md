@@ -58,6 +58,24 @@ cargo tauri build --features gui
 **Esperado no passo 6**: os instaladores aparecem em
 `src-tauri/target/release/bundle/msi/*.msi` e `src-tauri/target/release/bundle/nsis/*.exe`.
 
+## Release hardening (issue #66)
+
+| Peça | Onde |
+|------|------|
+| Runbook local (build + `SHA256SUMS`) | `scripts/windows/release-desktop-shell.ps1` |
+| Stub do sidecar só para CI/packaging | `scripts/windows/ensure-sidecar-stub.ps1` (produção: `build-audio-agent-sidecar.ps1`) |
+| Checksums multiplataforma | `scripts/release/checksum-artifacts.sh` |
+| CI Windows packaging | `.github/workflows/desktop-release.yml` (`workflow_dispatch` / tags `v*`) |
+| Code signing (prep, sem cert no git) | [code-signing.md](./code-signing.md) |
+| Checklist install/upgrade/uninstall | [docs/validation/r5-desktop-install-checklist.md](../validation/r5-desktop-install-checklist.md) |
+
+```powershell
+# Release local com agent real
+.\scripts\windows\build-audio-agent-sidecar.ps1
+.\scripts\windows\release-desktop-shell.ps1 -UseRealSidecar
+# Artefatos + SHA256SUMS em dist\desktop-release\
+```
+
 ## Configuração pós-instalação
 
 Na primeira execução, o shell cria `shell-config.json` no diretório de config do app
