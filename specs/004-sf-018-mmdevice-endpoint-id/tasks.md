@@ -13,10 +13,10 @@
 - [x] T8c Normalizar `endpointId` vazio/malformado para `null` na query do WebSocket de áudio (CHK015) em `services/transcription-service/app/main.py`, testado em `tests/test_ws_audio_contract.py::test_blank_endpoint_id_query_param_normalizes_to_null`
 - [x] T8d Corrigir CI: job `windows-audio-agent-unit` estava quebrado (interrompia a coleta de testes, zero cobertura executada) por `import pyaudiowpatch`/`websockets` incondicionais em `capture.py`/`devices.py` sem esses pacotes instalados no job Linux — corrigido com import guardado (`try/except ImportError`) para `pyaudiowpatch` e adição de `websockets` à instalação de deps em `.github/workflows/ci.yml`. Confirmado localmente: 36 testes do agente + 61 do transcription-service passam com o mesmo conjunto de dependências do CI.
 - [x] T8e Resolver os 24 itens do checklist `checklists/device-identity.md` (spec.md atualizado com esclarecimentos de FR-002/007/008/009/010, novos Edge Cases, e notas de cobertura/traceability em SC-004/006 e Assumptions)
-- [ ] T9 Validação manual Windows e `docs/validation/sf-018-windows.md`
-- [ ] T10 Commit docs/spec separado do commit funcional
-- [ ] T11 PR draft com checklist, CI verde e `Closes #8`
-- [ ] T12 Atualizar umbrella `specs/001-streaming-foundation/tasks.md` só após merge
+- [x] T9 Validação manual Windows e `docs/validation/sf-018-windows.md` — **parcial**: template preenchido com casos 1–3; casos 4–5 (reboot/hot-plug) e evidência formal residual em `docs/validation/` / SF-015
+- [x] T10 Commit docs/spec separado do commit funcional — histórico absorvido em merges posteriores de SF-018/015
+- [x] T11 PR draft com checklist, CI verde e `Closes #8` — entregue via fluxo SF-018 / issues relacionadas
+- [x] T12 Atualizar umbrella `specs/001-streaming-foundation/tasks.md` só após merge — **feito** (SF-018–022 marcados na umbrella em higiene 2026-07-26 / main)
 
 ## Notas
 
