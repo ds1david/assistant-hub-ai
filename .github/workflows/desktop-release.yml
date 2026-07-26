@@ -12,17 +12,21 @@ on:
 permissions:
   contents: read
 
+# Prefer Node 24 for JS actions (Node 20 deprecated on runners).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   package-windows:
     name: tauri-build-windows
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: apps/desktop-shell/package-lock.json
 
@@ -73,7 +77,7 @@ jobs:
           }
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: desktop-shell-windows
           path: dist/desktop-release/
@@ -98,7 +102,7 @@ jobs:
     name: checksum-script-smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Generate checksums for sample files
         run: |
           chmod +x scripts/release/checksum-artifacts.sh
