@@ -701,3 +701,151 @@ def test_capture_channel_arrival_with_failed_reresolution_falls_back_to_backoff(
         record_path=None,
     )
     assert seen_endpoint_ids == ["EP1", "EP1", "EP1"], "must never substitute a different device"
+
+
+def test_connection_closed_reconnects_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Keepalive timeouts / STT restarts are expected: WARNING + reconnect, no stack."""
+    from websockets.exceptions import ConnectionClosedError
+    from websockets.frames import Close
+
+    calls = {"count": 0}
+
+    def _fake_capture_once(*, stop_event: threading.Event, **_kwargs: Any) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise ConnectionClosedError(None, Close(1011, "keepalive ping timeout"))
+        stop_event.set()
+
+    monkeypatch.setattr(capture, "_capture_once", _fake_capture_once)
+    stop_event = threading.Event()
+    stop_event.wait = lambda timeout=None: False  # type: ignore[method-assign]
+
+    with caplog.at_level("WARNING", logger="assistant_hub_audio.capture"):
+        capture.capture_channel(
+            audio=None,
+            channel=_channel(),
+            session_id="s1",
+            server_url="ws://example.invalid",
+            stop_event=stop_event,
+            record_path=None,
+        )
+
+    assert calls["count"] == 2
+    closed_records = [r for r in caplog.records if "WebSocket closed" in r.getMessage()]
+    assert len(closed_records) == 1
+    assert closed_records[0].levelname == "WARNING"
+    assert closed_records[0].exc_info is None
+    assert "keepalive ping timeout" in closed_records[0].getMessage()
+    assert not any("Capture failed" in r.getMessage() for r in caplog.records)
+
+
+def test_connection_error_reconnects_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """STT down / refused connects use WARNING + reconnect, not a stack dump."""
+    calls = {"count": 0}
+
+    def _fake_capture_once(*, stop_event: threading.Event, **_kwargs: Any) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise ConnectionRefusedError("Connection refused")
+        stop_event.set()
+
+    monkeypatch.setattr(capture, "_capture_once", _fake_capture_once)
+    stop_event = threading.Event()
+    stop_event.wait = lambda timeout=None: False  # type: ignore[method-assign]
+
+    with caplog.at_level("WARNING", logger="assistant_hub_audio.capture"):
+        capture.capture_channel(
+            audio=None,
+            channel=_channel(),
+            session_id="s1",
+            server_url="ws://example.invalid",
+            stop_event=stop_event,
+            record_path=None,
+        )
+
+    assert calls["count"] == 2
+    error_records = [r for r in caplog.records if "WebSocket connection error" in r.getMessage()]
+    assert len(error_records) == 1
+    assert error_records[0].levelname == "WARNING"
+    assert error_records[0].exc_info is None
+
+
+def test_unexpected_capture_error_still_logs_exception(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Non-transport failures keep the full traceback for debugging."""
+    calls = {"count": 0}
+
+    def _fake_capture_once(*, stop_event: threading.Event, **_kwargs: Any) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("boom")
+        stop_event.set()
+
+    monkeypatch.setattr(capture, "_capture_once", _fake_capture_once)
+    stop_event = threading.Event()
+    stop_event.wait = lambda timeout=None: False  # type: ignore[method-assign]
+
+    with caplog.at_level("ERROR", logger="assistant_hub_audio.capture"):
+        capture.capture_channel(
+            audio=None,
+            channel=_channel(),
+            session_id="s1",
+            server_url="ws://example.invalid",
+            stop_event=stop_event,
+            record_path=None,
+        )
+
+    assert calls["count"] == 2
+    failed = [r for r in caplog.records if "Capture failed" in r.getMessage()]
+    assert len(failed) == 1
+    assert failed[0].exc_info is not None
+
+
+def test_capture_once_passes_tolerant_websocket_keepalive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Win→WSL streams need a longer pong window than the websockets default."""
+    connect_kwargs: dict[str, Any] = {}
+    stop_event = threading.Event()
+
+    class _StopAfterSend(_FakeWebsocket):
+        def send(self, _data: bytes) -> None:
+            stop_event.set()
+
+    class _StopConnection:
+        def __enter__(self) -> _StopAfterSend:
+            return _StopAfterSend()
+
+        def __exit__(self, *_exc: Any) -> bool:
+            return False
+
+    def _fake_connect(_url: str, **kwargs: Any) -> _StopConnection:
+        connect_kwargs.update(kwargs)
+        return _StopConnection()
+
+    monkeypatch.setattr(capture, "resolve_device", lambda audio, channel: _fake_device("EP1"))
+    monkeypatch.setattr(capture, "connect", _fake_connect)
+    monkeypatch.setattr(capture, "pyaudio", _FakePyAudioModule, raising=False)
+
+    capture._capture_once(
+        audio=_FakeAudio(_FakeStream()),
+        channel=_channel_with_endpoint("EP1"),
+        session_id="s1",
+        server_url="ws://127.0.0.1:8001",
+        stop_event=stop_event,
+        record_path=None,
+        chunk_size=16,
+        signal=ChannelHotplugSignal(configured_endpoint_id="EP1"),
+        on_resolved=lambda: None,
+    )
+
+    assert connect_kwargs["ping_interval"] == capture._WS_PING_INTERVAL_SECONDS
+    assert connect_kwargs["ping_timeout"] == capture._WS_PING_TIMEOUT_SECONDS
+    assert connect_kwargs["ping_timeout"] >= 60.0
+    assert connect_kwargs["open_timeout"] == capture._WS_OPEN_TIMEOUT_SECONDS
+    assert connect_kwargs["close_timeout"] == capture._WS_CLOSE_TIMEOUT_SECONDS

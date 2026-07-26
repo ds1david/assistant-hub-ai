@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 
 import numpy as np
 from scipy.signal import resample_poly
+from websockets.exceptions import ConnectionClosed
 from websockets.sync.client import connect
 
 try:
@@ -33,6 +34,14 @@ TARGET_RATE = 16_000
 SAMPLE_WIDTH_BYTES = 2
 _WORKER_STARTUP_DELAY_SECONDS = 0.8
 _WORKER_SHUTDOWN_TIMEOUT_SECONDS = 4.0
+# Long-lived Win→WSL localhost PCM streams can stall briefly under STT load or
+# port-forward jitter. Default websockets ping_timeout=20s is too aggressive and
+# produced noisy 1011 keepalive drops; keep pings for half-open detection but
+# allow a longer pong window before reconnecting.
+_WS_OPEN_TIMEOUT_SECONDS = 10.0
+_WS_CLOSE_TIMEOUT_SECONDS = 3.0
+_WS_PING_INTERVAL_SECONDS = 20.0
+_WS_PING_TIMEOUT_SECONDS = 60.0
 
 
 def _normalize_pcm(
@@ -273,6 +282,26 @@ def capture_channel(
                 # _capture_once again right away, which re-resolves
                 # process_name fresh (FR-012) - not the generic device
                 # reconnect backoff.
+            except ConnectionClosed as exc:
+                # Expected on STT restart (1012), keepalive timeout (1011), or
+                # half-open sockets: reconnect with backoff, without a full
+                # traceback (the reconnect INFO line is the useful signal).
+                LOGGER.warning(
+                    "WebSocket closed for channel=%s: %s; reconnecting",
+                    channel.channel_id,
+                    exc,
+                )
+                if _retry_after_wait():
+                    return
+            except ConnectionError as exc:
+                # Connection refused / reset while STT is down or restarting.
+                LOGGER.warning(
+                    "WebSocket connection error for channel=%s: %s; reconnecting",
+                    channel.channel_id,
+                    exc,
+                )
+                if _retry_after_wait():
+                    return
             except Exception as exc:
                 LOGGER.exception("Capture failed for channel=%s: %s", channel.channel_id, exc)
                 if _retry_after_wait():
@@ -382,8 +411,10 @@ def _capture_once(
     try:
         with WavRecorder(record_path) as recorder, connect(
             endpoint,
-            open_timeout=10,
-            close_timeout=3,
+            open_timeout=_WS_OPEN_TIMEOUT_SECONDS,
+            close_timeout=_WS_CLOSE_TIMEOUT_SECONDS,
+            ping_interval=_WS_PING_INTERVAL_SECONDS,
+            ping_timeout=_WS_PING_TIMEOUT_SECONDS,
             max_size=None,
         ) as websocket:
             while not stop_event.is_set():
