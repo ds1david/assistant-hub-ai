@@ -210,6 +210,14 @@ function paintAssistant(): void {
       assistantController.setPrefs(prefs);
       void persistPrefs(prefs);
     },
+    onToggleIncludeMicContext: (enabled) => {
+      const prefs = {
+        ...currentPrefsFromController(),
+        includeMicrophoneInContext: enabled,
+      };
+      assistantController.setPrefs(prefs);
+      void persistPrefs(prefs);
+    },
     onToggleUseProsody: (enabled) => {
       const prefs = { ...currentPrefsFromController(), useProsody: enabled };
       assistantController.setPrefs(prefs);

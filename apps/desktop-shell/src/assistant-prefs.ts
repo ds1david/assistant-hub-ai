@@ -1,4 +1,4 @@
-// Preferências do Assistente por sessão — tipos, defaults e wrappers Tauri (FR-025 / 023 FR-005).
+// Preferências do Assistente por sessão — tipos, defaults e wrappers Tauri (FR-025 / 023 / 028).
 import { invoke } from "@tauri-apps/api/core";
 
 export type CanonicalSourceType = "microphone" | "system";
@@ -8,12 +8,17 @@ export interface AssistantSessionPreferences {
   autoEnabled: boolean;
   enabledSourceTypes: CanonicalSourceType[];
   inputMode: InputMode;
-  /** FR-004 (023): Final system ≥8 chars is always a candidate. */
+  /** FR-004 (023): Final system ≥8 chars is always a candidate. Also enables interview style (028). */
   interviewMode: boolean;
   /** FR-006/008: use optional prosody.questionScore from Final events. */
   useProsody: boolean;
   /** [0,1]; no dedicated UI control in v1 (store default). */
   prosodyThreshold: number;
+  /**
+   * 028: include microphone Finals in recent-context builder.
+   * Default ON when missing (opt-out). Does NOT affect trigger origins.
+   */
+  includeMicrophoneInContext: boolean;
 }
 
 export const DEFAULT_ASSISTANT_PREFS: AssistantSessionPreferences = {
@@ -23,6 +28,7 @@ export const DEFAULT_ASSISTANT_PREFS: AssistantSessionPreferences = {
   interviewMode: false,
   useProsody: false,
   prosodyThreshold: 0.65,
+  includeMicrophoneInContext: true,
 };
 
 /** Clone prefs with a fresh enabledSourceTypes array. */
@@ -34,6 +40,7 @@ export function clonePrefs(prefs: AssistantSessionPreferences): AssistantSession
     interviewMode: prefs.interviewMode,
     useProsody: prefs.useProsody,
     prosodyThreshold: prefs.prosodyThreshold,
+    includeMicrophoneInContext: prefs.includeMicrophoneInContext,
   };
 }
 
@@ -86,6 +93,7 @@ export async function savePrefs(
       interviewMode: prefs.interviewMode,
       useProsody: prefs.useProsody,
       prosodyThreshold: prefs.prosodyThreshold,
+      includeMicrophoneInContext: prefs.includeMicrophoneInContext,
     },
   });
 }
@@ -101,6 +109,14 @@ function clampThreshold(value: unknown): number {
     return 1;
   }
   return value;
+}
+
+/** Missing/null includeMicrophoneInContext → true (028 default ON). */
+function normalizeIncludeMic(raw: Partial<AssistantSessionPreferences>): boolean {
+  if (raw.includeMicrophoneInContext === undefined || raw.includeMicrophoneInContext === null) {
+    return true;
+  }
+  return Boolean(raw.includeMicrophoneInContext);
 }
 
 export function normalizePrefs(
@@ -123,5 +139,6 @@ export function normalizePrefs(
     interviewMode: Boolean(raw.interviewMode),
     useProsody: Boolean(raw.useProsody),
     prosodyThreshold: clampThreshold(raw.prosodyThreshold),
+    includeMicrophoneInContext: normalizeIncludeMic(raw),
   };
 }

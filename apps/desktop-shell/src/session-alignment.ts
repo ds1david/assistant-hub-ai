@@ -80,6 +80,7 @@ export function resolveAssistantEmptyKind(input: {
       typeof input.prosodyThreshold === "number"
         ? input.prosodyThreshold
         : DEFAULT_ASSISTANT_PREFS.prosodyThreshold,
+    // includeMicrophoneInContext from DEFAULT — gate de disparo não usa o campo
   };
 
   const hasPartial = input.feed.some((e) => e.kind === ("Partial" as FeedEntryKind));

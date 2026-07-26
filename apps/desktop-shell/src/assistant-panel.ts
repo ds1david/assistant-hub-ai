@@ -10,6 +10,7 @@ export interface AssistantPanelCallbacks {
   onInputModeChange: (mode: InputMode) => void;
   onToggleInterviewMode: (enabled: boolean) => void;
   onToggleUseProsody: (enabled: boolean) => void;
+  onToggleIncludeMicContext: (enabled: boolean) => void;
   onResolveConflict: (choice: ConflictChoice) => void;
 }
 
@@ -27,6 +28,7 @@ export function renderAssistantPanel(
     interviewMode: false,
     useProsody: false,
     prosodyThreshold: 0.65,
+    includeMicrophoneInContext: true,
   };
   const systemOn = prefs.enabledSourceTypes.includes("system");
   const micOn = prefs.enabledSourceTypes.includes("microphone");
@@ -74,10 +76,15 @@ export function renderAssistantPanel(
             </option>
           </select>
         </label>
-        <label class="assistant-toggle" title="Todo Final da origem sistema (≥8 chars) vira candidato">
+        <label class="assistant-toggle" title="Todo Final da origem sistema (≥8 chars) vira candidato; respostas em 1ª pessoa">
           <input type="checkbox" data-testid="assistant-interview-mode" data-action="toggle-interview"
             ${prefs.interviewMode ? "checked" : ""} ${disabledAttr} />
-          modo entrevista (todo final system)
+          modo entrevista (todo final system + 1ª pessoa)
+        </label>
+        <label class="assistant-toggle" title="Incluir finais do microfone no contexto enviado ao modelo (não dispara automático)">
+          <input type="checkbox" data-testid="assistant-include-mic-context" data-action="toggle-include-mic"
+            ${prefs.includeMicrophoneInContext !== false ? "checked" : ""} ${disabledAttr} />
+          incluir minha voz no contexto
         </label>
         <label class="assistant-toggle" title="Usar score de entonação no Final quando presente">
           <input type="checkbox" data-testid="assistant-use-prosody" data-action="toggle-prosody"
@@ -122,6 +129,12 @@ export function renderAssistantPanel(
     .querySelector<HTMLInputElement>('[data-action="toggle-interview"]')
     ?.addEventListener("change", (event) => {
       callbacks.onToggleInterviewMode((event.target as HTMLInputElement).checked);
+    });
+
+  container
+    .querySelector<HTMLInputElement>('[data-action="toggle-include-mic"]')
+    ?.addEventListener("change", (event) => {
+      callbacks.onToggleIncludeMicContext((event.target as HTMLInputElement).checked);
     });
 
   container

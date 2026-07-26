@@ -17,6 +17,7 @@ const callbacks = () => ({
   onInputModeChange: vi.fn(),
   onToggleInterviewMode: vi.fn(),
   onToggleUseProsody: vi.fn(),
+  onToggleIncludeMicContext: vi.fn(),
   onResolveConflict: vi.fn(),
 });
 
@@ -63,6 +64,7 @@ describe("renderAssistantPanel", () => {
         interviewMode: false,
         useProsody: false,
         prosodyThreshold: 0.65,
+        includeMicrophoneInContext: true,
       },
       busy: true,
       turns: [
@@ -211,6 +213,7 @@ describe("renderAssistantPanel", () => {
           interviewMode: false,
           useProsody: false,
           prosodyThreshold: 0.65,
+          includeMicrophoneInContext: true,
         },
         busy: false,
         turns: [
@@ -244,25 +247,60 @@ describe("renderAssistantPanel", () => {
     );
   });
 
-  it("wires interview mode and useProsody toggles", () => {
+  it("wires interview mode, include-mic context and useProsody toggles", () => {
     const container = document.createElement("div");
     const cbs = callbacks();
     renderAssistantPanel(container, emptyView, cbs);
     const interview = container.querySelector<HTMLInputElement>(
       '[data-testid="assistant-interview-mode"]',
     );
+    const includeMic = container.querySelector<HTMLInputElement>(
+      '[data-testid="assistant-include-mic-context"]',
+    );
     const prosody = container.querySelector<HTMLInputElement>('[data-testid="assistant-use-prosody"]');
     expect(interview).toBeTruthy();
+    expect(includeMic).toBeTruthy();
+    expect(includeMic?.checked).toBe(true); // default ON
     expect(prosody).toBeTruthy();
     if (interview) {
       interview.checked = true;
       interview.dispatchEvent(new Event("change"));
+    }
+    if (includeMic) {
+      includeMic.checked = false;
+      includeMic.dispatchEvent(new Event("change"));
     }
     if (prosody) {
       prosody.checked = true;
       prosody.dispatchEvent(new Event("change"));
     }
     expect(cbs.onToggleInterviewMode).toHaveBeenCalledWith(true);
+    expect(cbs.onToggleIncludeMicContext).toHaveBeenCalledWith(false);
     expect(cbs.onToggleUseProsody).toHaveBeenCalledWith(true);
+  });
+
+  it("shows latencyMs for done turns", () => {
+    const container = document.createElement("div");
+    renderAssistantPanel(
+      container,
+      {
+        ...emptyView,
+        turns: [
+          {
+            id: "t1",
+            question: "Q?",
+            eventId: "e1",
+            channelId: "sys",
+            status: "done",
+            answer: "A.",
+            error: null,
+            providerId: "p1",
+            latencyMs: 120,
+          },
+        ],
+      },
+      callbacks(),
+    );
+    expect(container.textContent).toContain("120 ms");
   });
 });

@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AssistantAutoController,
   buildInvokeInput,
+  CONTEXT_LABEL_MICROPHONE,
+  CONTEXT_LABEL_SYSTEM,
   extractNewQuestions,
+  hasMetaAssistantStyle,
+  INTERVIEW_ANSWER_INSTRUCTION,
   isQuestionCandidate,
   looksLikeQuestion,
   MAX_CONTEXT_CHARS,
@@ -44,6 +48,7 @@ const systemOnlyPrefs: AssistantSessionPreferences = {
   interviewMode: false,
   useProsody: false,
   prosodyThreshold: 0.65,
+  includeMicrophoneInContext: true,
 };
 
 describe("looksLikeQuestion (FR-002)", () => {
@@ -156,47 +161,125 @@ describe("extractNewQuestions", () => {
   });
 });
 
-describe("buildInvokeInput", () => {
+describe("buildInvokeInput (028)", () => {
+  const mixed = [
+    { eventId: "a", text: "Resposta anterior do candidato sobre Spring", sourceType: "microphone" as const },
+    { eventId: "b", text: "Pergunta do entrevistador sobre Java", sourceType: "system" as const },
+    { eventId: "c", text: "Pergunta atual?", sourceType: "system" as const },
+  ];
+
   it("question-only omits context", () => {
     const input = buildInvokeInput(
       "Pergunta?",
       [
-        { eventId: "a", text: "contexto um" },
-        { eventId: "b", text: "contexto dois" },
+        { eventId: "a", text: "contexto um", sourceType: "system" },
+        { eventId: "b", text: "contexto dois", sourceType: "microphone" },
       ],
       "question-only",
-      "b",
+      { excludeEventId: "b" },
     );
     expect(input).toBe("Pergunta?");
+    expect(input).not.toContain("contexto");
   });
 
-  it("context mode includes prior finals and question", () => {
-    const input = buildInvokeInput(
-      "Pergunta atual?",
-      [
-        { eventId: "a", text: "trecho anterior" },
-        { eventId: "b", text: "Pergunta atual?" },
-      ],
-      "question-plus-recent-context",
-      "b",
-    );
-    expect(input).toContain("trecho anterior");
+  it("question-only with interviewMode prefixes instruction", () => {
+    const input = buildInvokeInput("Pergunta?", [], "question-only", {
+      interviewMode: true,
+    });
+    expect(input).toContain(INTERVIEW_ANSWER_INSTRUCTION);
+    expect(input).toContain("Pergunta?");
+  });
+
+  it("mixed finals + include mic ON contain labels and both origins", () => {
+    const input = buildInvokeInput("Pergunta atual?", mixed, "question-plus-recent-context", {
+      excludeEventId: "c",
+      includeMicrophoneInContext: true,
+    });
+    expect(input).toContain("Resposta anterior do candidato sobre Spring");
+    expect(input).toContain("Pergunta do entrevistador sobre Java");
+    expect(input).toContain(`${CONTEXT_LABEL_MICROPHONE}:`);
+    expect(input).toContain(`${CONTEXT_LABEL_SYSTEM}:`);
     expect(input).toContain("Pergunta atual?");
     expect(input).toContain("Contexto recente");
   });
 
-  it("respects char budget", () => {
+  it("include mic OFF excludes microphone text", () => {
+    const input = buildInvokeInput("Pergunta atual?", mixed, "question-plus-recent-context", {
+      excludeEventId: "c",
+      includeMicrophoneInContext: false,
+    });
+    expect(input).not.toContain("Resposta anterior do candidato");
+    expect(input).not.toContain(CONTEXT_LABEL_MICROPHONE);
+    expect(input).toContain("Pergunta do entrevistador sobre Java");
+    expect(input).toContain(CONTEXT_LABEL_SYSTEM);
+  });
+
+  it("omits null/unknown sourceType from context", () => {
+    const input = buildInvokeInput(
+      "Q?",
+      [
+        { eventId: "1", text: "fantasma", sourceType: null },
+        { eventId: "2", text: "sistema ok", sourceType: "system" },
+      ],
+      "question-plus-recent-context",
+    );
+    expect(input).not.toContain("fantasma");
+    expect(input).toContain("sistema ok");
+  });
+
+  it("interviewMode prefixes instruction on context mode", () => {
+    const input = buildInvokeInput("Pergunta atual?", mixed, "question-plus-recent-context", {
+      excludeEventId: "c",
+      interviewMode: true,
+    });
+    expect(input.startsWith(INTERVIEW_ANSWER_INSTRUCTION)).toBe(true);
+    expect(input).toContain("1ª pessoa");
+  });
+
+  it("interviewMode false has no instruction block", () => {
+    const input = buildInvokeInput("Pergunta atual?", mixed, "question-plus-recent-context", {
+      excludeEventId: "c",
+      interviewMode: false,
+    });
+    expect(input).not.toContain(INTERVIEW_ANSWER_INSTRUCTION);
+  });
+
+  it("respects char budget including labels", () => {
     const huge = "x".repeat(MAX_CONTEXT_CHARS);
     const input = buildInvokeInput(
       "Q?",
       [
-        { eventId: "1", text: huge },
-        { eventId: "2", text: "short" },
+        { eventId: "1", text: huge, sourceType: "system" },
+        { eventId: "2", text: "short", sourceType: "system" },
       ],
       "question-plus-recent-context",
     );
-    // short + huge would exceed when short already placed; at least question present
     expect(input).toContain("Q?");
+    // labeled short should fit; huge alone may exceed with label → at least question
+    expect(input).toContain(CONTEXT_LABEL_SYSTEM);
+  });
+});
+
+describe("hasMetaAssistantStyle (028 FR-012)", () => {
+  it("detects bad meta-assistant fixtures", () => {
+    expect(hasMetaAssistantStyle("Claro! Você poderia dizer que usa Spring.")).toBe(true);
+    expect(hasMetaAssistantStyle("Como candidato, você deve responder com métricas.")).toBe(true);
+    expect(hasMetaAssistantStyle("Responda assim: eu lidero times.")).toBe(true);
+    expect(
+      hasMetaAssistantStyle("- a\n- b\n- c\n- d\nmais texto"),
+    ).toBe(true);
+    expect(hasMetaAssistantStyle("## Título\ntexto")).toBe(true);
+  });
+
+  it("accepts good first-person speech", () => {
+    expect(
+      hasMetaAssistantStyle(
+        "Eu liderei a migração do monólito para serviços com Spring Boot e reduzi o tempo de deploy.",
+      ),
+    ).toBe(false);
+    expect(hasMetaAssistantStyle("No meu último projeto usei Java e mensageria assíncrona.")).toBe(
+      false,
+    );
   });
 });
 
@@ -348,6 +431,85 @@ describe("AssistantAutoController", () => {
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
     controller.ingestTranscript([entry]);
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("028: mic Final non-candidate is tracked and enters next invoke context", async () => {
+    const invoke = vi.fn().mockResolvedValue(okResult("ok"));
+    const controller = controllerWithInvoke(invoke);
+    controller.setPrefs({
+      ...systemOnlyPrefs,
+      inputMode: "question-plus-recent-context",
+      includeMicrophoneInContext: true,
+      interviewMode: false,
+    });
+    // Mic speech — not a trigger with system-only origins
+    controller.ingestTranscript([
+      finalEntry({
+        eventId: "mic1",
+        text: "Eu usei Spring Boot no meu ultimo projeto",
+        sourceType: "microphone",
+        channelId: "mic-1",
+      }),
+    ]);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(controller.getView().turns).toHaveLength(0);
+
+    controller.ingestTranscript([
+      finalEntry({
+        eventId: "sys1",
+        text: "Me conte sobre um projeto relevante com Java?",
+        sourceType: "system",
+      }),
+    ]);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalled());
+    const input = invoke.mock.calls[0][0] as string;
+    expect(input).toContain("Eu usei Spring Boot");
+    expect(input).toContain(CONTEXT_LABEL_MICROPHONE);
+  });
+
+  it("028: microphone-only Final does not create turn with default origins", () => {
+    const invoke = vi.fn();
+    const controller = controllerWithInvoke(invoke);
+    controller.ingestTranscript([
+      finalEntry({
+        eventId: "m1",
+        text: "Como eu deveria responder essa pergunta?",
+        sourceType: "microphone",
+      }),
+    ]);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(controller.getView().turns).toHaveLength(0);
+  });
+
+  it("028: partial never creates turn", () => {
+    const invoke = vi.fn();
+    const controller = controllerWithInvoke(invoke);
+    controller.ingestTranscript([
+      {
+        eventId: "p1",
+        channelId: "sys-1",
+        sourceType: "system",
+        label: "Sistema",
+        text: "Como funciona o garbage collector?",
+        kind: "Partial",
+        occurredAt: "2026-01-01T00:00:01Z",
+      },
+    ]);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(controller.getView().turns).toHaveLength(0);
+  });
+
+  it("028 FR-012b: keeps raw model output even if meta style", async () => {
+    const bad = "Claro! Você poderia dizer que lidera times.";
+    const invoke = vi.fn().mockResolvedValue(okResult(bad));
+    const controller = controllerWithInvoke(invoke);
+    controller.setPrefs({ ...systemOnlyPrefs, interviewMode: true });
+    controller.ingestTranscript([finalEntry({ eventId: "e1", text: "Me conte sobre lideranca?" })]);
+    await vi.waitFor(() => {
+      const done = controller.getView().turns.find((t) => t.status === "done");
+      expect(done?.answer).toBe(bad);
+    });
+    expect(hasMetaAssistantStyle(bad)).toBe(true);
   });
 
   it("wait after A finished with dialog still open starts B (T041 / FR-009)", async () => {
