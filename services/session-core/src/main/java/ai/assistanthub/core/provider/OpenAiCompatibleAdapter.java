@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -63,6 +64,29 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
     }
 
     @Override
+    public ModelsDiscoveryResult listModels(Provider provider) {
+        try {
+            HttpRequest request = requestBuilder(provider, "/models", provider.defaults().timeoutMs())
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            InvocationErrorType errorType = classify(response.statusCode());
+            if (errorType != null) {
+                return ModelsDiscoveryResult.failure(
+                        provider.id(), errorType, httpFailureMessage(response.statusCode(), response.body()));
+            }
+            return ModelsDiscoveryResult.ok(provider.id(), parseModels(response.body()));
+        } catch (HttpTimeoutException e) {
+            return ModelsDiscoveryResult.failure(provider.id(), InvocationErrorType.TIMEOUT, "timeout ao listar modelos");
+        } catch (IOException | InterruptedException e) {
+            if (Thread.currentThread().isInterrupted()) {
+                Thread.currentThread().interrupt();
+            }
+            return ModelsDiscoveryResult.failure(provider.id(), InvocationErrorType.GENERIC, describe(e));
+        }
+    }
+
+    @Override
     public AdapterOutcome invoke(Provider provider, InvocationRequest request) {
         try {
             Map<String, Object> body = Map.of(
@@ -78,7 +102,12 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
             if (errorType != null) {
                 return AdapterOutcome.failure(errorType, httpFailureMessage(response.statusCode(), response.body()));
             }
-            return AdapterOutcome.success(extractContent(response.body()));
+            String content = extractContent(response.body());
+            Integer[] usage = extractUsage(response.body());
+            if (usage != null) {
+                return AdapterOutcome.success(content, usage[0], usage[1], usage[2]);
+            }
+            return AdapterOutcome.success(content);
         } catch (HttpTimeoutException e) {
             return AdapterOutcome.failure(InvocationErrorType.TIMEOUT, "timeout na invocação");
         } catch (IOException | InterruptedException e) {
@@ -219,6 +248,56 @@ public class OpenAiCompatibleAdapter implements ProviderAdapterFactory.TypedProv
         } catch (IOException e) {
             return responseBody;
         }
+    }
+
+    /** @return {@code [prompt, completion, total]} ou null se usage ausente (não inventa valores). */
+    private Integer[] extractUsage(String responseBody) {
+        try {
+            JsonNode usage = objectMapper.readTree(responseBody).path("usage");
+            if (usage.isMissingNode() || usage.isNull()) {
+                return null;
+            }
+            Integer prompt = intOrNull(usage.get("prompt_tokens"));
+            Integer completion = intOrNull(usage.get("completion_tokens"));
+            Integer total = intOrNull(usage.get("total_tokens"));
+            if (prompt == null && completion == null && total == null) {
+                return null;
+            }
+            if (total == null && prompt != null && completion != null) {
+                total = prompt + completion;
+            }
+            return new Integer[] {prompt, completion, total};
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static Integer intOrNull(JsonNode node) {
+        if (node == null || node.isNull() || !node.isNumber()) {
+            return null;
+        }
+        return node.asInt();
+    }
+
+    private List<ModelInfo> parseModels(String responseBody) {
+        List<ModelInfo> models = new ArrayList<>();
+        try {
+            JsonNode data = objectMapper.readTree(responseBody).path("data");
+            if (!data.isArray()) {
+                return models;
+            }
+            for (JsonNode item : data) {
+                JsonNode id = item.get("id");
+                if (id == null || !id.isTextual() || id.asText().isBlank()) {
+                    continue;
+                }
+                String ownedBy = item.path("owned_by").isTextual() ? item.path("owned_by").asText() : null;
+                models.add(new ModelInfo(id.asText(), ownedBy));
+            }
+        } catch (IOException ignored) {
+            // lista vazia
+        }
+        return models;
     }
 
     /**

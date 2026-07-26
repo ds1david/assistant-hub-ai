@@ -93,11 +93,29 @@ public class InvocationService {
         if (lastFailure != null) {
             return lastFailure;
         }
-        return new InvocationResult(
+        return InvocationResult.of(
                 routeName, null, request.capability(), request.sessionId(), request.channelId(),
                 resolvedSourceType, false, InvocationErrorType.GENERIC,
                 null, "nenhum provedor habilitado disponível para a rota '" + routeName + "'",
                 0, Instant.now());
+    }
+
+    /** Descoberta de modelos do provedor (027) — não passa pelo circuit breaker de invoke. */
+    public ModelsDiscoveryResult listModels(String providerId) {
+        Provider provider = registry.findById(providerId)
+                .orElseThrow(() -> new ProviderNotFoundException(providerId));
+        Optional<ProviderAdapter> adapter = adapterFactory.resolve(provider);
+        if (adapter.isEmpty()) {
+            return ModelsDiscoveryResult.failure(
+                    providerId, InvocationErrorType.GENERIC,
+                    "nenhum adaptador disponível para o type '" + provider.type().wireValue() + "'");
+        }
+        return runWithTimeout(
+                () -> adapter.get().listModels(provider),
+                provider.defaults().timeoutMs(),
+                () -> ModelsDiscoveryResult.failure(
+                        providerId, InvocationErrorType.TIMEOUT,
+                        "timeout após " + provider.defaults().timeoutMs() + "ms"));
     }
 
     /**
@@ -140,7 +158,7 @@ public class InvocationService {
             sink.onTerminal(lastFailure);
             return;
         }
-        sink.onTerminal(new InvocationResult(
+        sink.onTerminal(InvocationResult.of(
                 routeName, null, request.capability(), request.sessionId(), request.channelId(),
                 resolvedSourceType, false, InvocationErrorType.GENERIC,
                 null, "nenhum provedor habilitado disponível para a rota '" + routeName + "'",
@@ -188,10 +206,11 @@ public class InvocationService {
                 () -> AdapterOutcome.failure(
                         InvocationErrorType.TIMEOUT, "timeout após " + provider.defaults().timeoutMs() + "ms"));
 
-        InvocationResult result = new InvocationResult(
+        InvocationResult result = InvocationResult.of(
                 provider.id(), provider.defaults().model(), request.capability(), request.sessionId(),
                 request.channelId(), sourceType, outcome.success(), outcome.errorType(), outcome.output(),
-                outcome.message(), elapsedMs(startedAt), Instant.now());
+                outcome.message(), elapsedMs(startedAt), Instant.now(),
+                outcome.promptTokens(), outcome.completionTokens(), outcome.totalTokens());
         logInvocation(result);
         return result;
     }
@@ -243,10 +262,11 @@ public class InvocationService {
             String output = outcome.success()
                     ? (assembled.length() > 0 ? assembled.toString() : outcome.output())
                     : null;
-            InvocationResult result = new InvocationResult(
+            InvocationResult result = InvocationResult.of(
                     provider.id(), provider.defaults().model(), request.capability(), request.sessionId(),
                     request.channelId(), sourceType, outcome.success(), outcome.errorType(), output,
-                    outcome.message(), elapsedMs(startedAt), Instant.now());
+                    outcome.message(), elapsedMs(startedAt), Instant.now(),
+                    outcome.promptTokens(), outcome.completionTokens(), outcome.totalTokens());
             logInvocation(result);
             return result;
         } catch (TimeoutException e) {
@@ -286,9 +306,10 @@ public class InvocationService {
     private void logInvocation(InvocationResult result) {
         LOGGER.info(
                 "ai-provider-invocation providerId={} model={} capability={} sessionId={} channelId={} "
-                        + "sourceType={} success={} errorType={} latencyMs={}",
+                        + "sourceType={} success={} errorType={} latencyMs={} totalTokens={}",
                 result.providerId(), result.model(), result.capability(), result.sessionId(), result.channelId(),
-                result.sourceType(), result.success(), result.errorType(), result.latencyMs());
+                result.sourceType(), result.success(), result.errorType(), result.latencyMs(),
+                result.totalTokens());
     }
 
     private InvocationResult failureResult(
@@ -298,7 +319,7 @@ public class InvocationService {
             InvocationErrorType errorType,
             String message,
             long startedAt) {
-        InvocationResult result = new InvocationResult(
+        InvocationResult result = InvocationResult.of(
                 provider.id(), provider.defaults().model(), request.capability(), request.sessionId(),
                 request.channelId(), sourceType, false, errorType, null, message, elapsedMs(startedAt), Instant.now());
         logInvocation(result);
@@ -306,7 +327,7 @@ public class InvocationService {
     }
 
     private InvocationResult cancelledResult(InvocationRequest request, String sourceType, String providerId) {
-        return new InvocationResult(
+        return InvocationResult.of(
                 providerId, null, request.capability(), request.sessionId(), request.channelId(),
                 sourceType, false, InvocationErrorType.GENERIC, null, "invocação cancelada", 0, Instant.now());
     }

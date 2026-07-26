@@ -99,6 +99,12 @@ public class AiProviderController {
         return invocationService.testConnection(provider);
     }
 
+    /** Descoberta de modelos (027) — OpenAI-compatible {@code GET /models}. */
+    @GetMapping("/{id}/models")
+    public ModelsDiscoveryResult listModels(@PathVariable("id") String id) {
+        return invocationService.listModels(id);
+    }
+
     @PostMapping("/invoke")
     public InvocationResult invoke(@RequestBody InvokeRequest request) {
         return invocationService.invoke(
