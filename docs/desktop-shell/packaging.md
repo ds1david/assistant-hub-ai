@@ -65,13 +65,50 @@ Na primeira execução, o shell cria `shell-config.json` no diretório de config
 `sessionCoreBaseUrl` apontando por padrão para `http://localhost:8080`. Ajuste esse valor se o
 `session-core` rodar em outra máquina/porta.
 
+## Sidecar do agent WASAPI (R5 / specs/025)
+
+O shell declara `bundle.externalBin: ["binaries/assistant-hub-audio"]` em
+`apps/desktop-shell/src-tauri/tauri.conf.json`. No build Windows, o Tauri 2 espera o
+artefato:
+
+```text
+apps/desktop-shell/src-tauri/binaries/assistant-hub-audio-x86_64-pc-windows-msvc.exe
+```
+
+### Gerar o artefato (host Windows)
+
+```powershell
+# Na raiz do monorepo (PowerShell nativo, não WSL):
+.\scripts\windows\build-audio-agent-sidecar.ps1
+# Opcional one-file (quando as deps nativas permitirem):
+.\scripts\windows\build-audio-agent-sidecar.ps1 -UsePyInstaller
+```
+
+O script instala o agent no venv padrão (`%LOCALAPPDATA%\AssistantHubAI\audio-agent-venv`),
+copia o launcher (ou o exe do PyInstaller) para `binaries/` e roda `--version`.
+
+### Resolução em runtime (FR-001)
+
+Ordem: **sidecar empacotado** → env `ASSISTANT_HUB_AUDIO_BIN` → `shell-config.json`
+`audioAgentBin` → PATH. O painel do agent mostra `binarySource` / versão / path.
+
+### Shutdown coordenado (FR-006)
+
+Ao sair do shell, apenas o agent **iniciado pelo shell** (handle gerenciado) é encerrado.
+Processos iniciados fora do shell (modo Guided) **não** são mortos — pare-os manualmente.
+
+### Developer sem sidecar
+
+Se `binaries/` não tiver o exe e o agent estiver no PATH (venv), o shell continua
+funcionando com `binarySource=path` (modo 014).
+
 ## Escopo desta fatia (R5) vs. `specs/002-desktop-distribution/`
 
-- **Incluído aqui**: instalador MSI/NSIS básico, sem assinatura de código, sem canal de
-  atualização automática (FR-011 — "packaging básico documentado").
-- **Fora de escopo desta fatia** (ver `specs/002-desktop-distribution/`, "Edições previstas"):
-  assinatura de instalador, atualização automática assinada, múltiplas edições
-  (Developer/Desktop Lite/Desktop GPU), Microsoft Store.
+- **Incluído (014 + 025)**: shell Tauri, packaging MSI/NSIS básico, sidecar do
+  `assistant-hub-audio` + supervisor de start/stop/shutdown, docs.
+- **Fora de escopo** (ver `specs/002-desktop-distribution/`):
+  assinatura de instalador, atualização automática assinada, sidecars de STT/JVM/provider-gateway,
+  ícone de bandeja, diagnóstico GPU completo, Microsoft Store.
 
 ## Solução de problemas
 

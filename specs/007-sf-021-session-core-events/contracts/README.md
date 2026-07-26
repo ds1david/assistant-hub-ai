@@ -2,6 +2,15 @@
 
 O contrato autoritativo vive em `contracts/` na raiz do monorepo (P4). Esta feature **não altera** nenhum schema — apenas passa a consumir um contrato já existente. Este arquivo documenta só a interface interna nova que resulta desse consumo.
 
+## Compatibilidade de versão (fronteira do consumidor)
+
+| Schema | Suporte neste consumidor (`session-core` / SF-021) |
+|--------|-----------------------------------------------------|
+| `contracts/transcript-event.v2.schema.json` | **Suportado** — único formato ingerido do feed `/ws/transcripts`. |
+| `contracts/transcript-event.v1.schema.json` | **Não suportado** — eventos v1 no feed são rejeitados/ignorados de forma isolada (não derrubam a sessão); não há caminho de mapeamento v1 → `HubEvent` nesta feature. |
+
+Quem publica no feed de transcrição deve emitir **somente** o contrato v2 (`transcript.partial.v2` / `transcript.final.v2`). Documentação de assumptions da feature: `spec.md` (Assumptions).
+
 ## 1. `contracts/transcript-event.v2.schema.json` (inalterado)
 
 Consumido como está pelo novo cliente WebSocket do `session-core`, a partir do feed `/ws/transcripts` já publicado por `services/transcription-service`. Nenhum campo, `required` ou versão muda. Ver `data-model.md` para o mapeamento campo a campo consumido.

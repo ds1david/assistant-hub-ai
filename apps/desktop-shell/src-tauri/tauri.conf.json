@@ -34,6 +34,7 @@
       "icons/icon.ico"
     ],
     "targets": ["msi", "nsis"],
+    "externalBin": ["binaries/assistant-hub-audio"],
     "windows": {}
   }
 }

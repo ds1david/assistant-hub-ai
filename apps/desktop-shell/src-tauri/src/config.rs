@@ -21,6 +21,13 @@ pub struct ShellConfig {
     pub session_core_base_url: String,
     #[serde(rename = "windowState", skip_serializing_if = "Option::is_none")]
     pub window_state: Option<WindowState>,
+    /// Override local do binário do agent (025 sidecar). Env `ASSISTANT_HUB_AUDIO_BIN` vence este campo.
+    #[serde(
+        rename = "audioAgentBin",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub audio_agent_bin: Option<String>,
 }
 
 impl Default for ShellConfig {
@@ -28,6 +35,7 @@ impl Default for ShellConfig {
         Self {
             session_core_base_url: "http://localhost:8080".to_string(),
             window_state: None,
+            audio_agent_bin: None,
         }
     }
 }
@@ -89,6 +97,7 @@ mod tests {
                 x: Some(10.0),
                 y: None,
             }),
+            audio_agent_bin: Some(r"C:\tools\assistant-hub-audio.exe".to_string()),
         };
 
         save(&path, &original).expect("save deve funcionar");

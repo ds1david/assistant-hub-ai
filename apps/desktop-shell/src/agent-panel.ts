@@ -31,7 +31,21 @@ export function renderAgentPanel(
     agentSessionId: status.agentSessionId ?? null,
   });
 
-  const statusLabel = status.running ? "ativo" : "parado";
+  const statusLabel = status.running
+    ? status.healthy === false
+      ? "não saudável"
+      : "ativo"
+    : "parado";
+  const binarySource = status.binarySource ?? "missing";
+  const binaryMeta = `<p class="agent-binary" data-testid="agent-binary-meta">Binário: <code data-testid="agent-binary-source">${escapeHtml(binarySource)}</code>${
+    status.agentVersion
+      ? ` · versão <code data-testid="agent-version">${escapeHtml(status.agentVersion)}</code>`
+      : " · versão desconhecida"
+  }${
+    status.binaryPath
+      ? ` · <code data-testid="agent-binary-path" title="${escapeHtml(status.binaryPath)}">${escapeHtml(status.binaryPath)}</code>`
+      : ""
+  }</p>`;
   const errorHtml = status.lastError
     ? `<p class="agent-error" data-testid="agent-error">${escapeHtml(status.lastError)}</p>`
     : "";
@@ -95,9 +109,10 @@ export function renderAgentPanel(
 
   container.innerHTML = `
     <section class="agent-panel-inner" data-testid="agent-panel-root" data-alignment="${alignment}">
-      <p class="agent-status" data-testid="agent-status" data-running="${status.running}">
+      <p class="agent-status" data-testid="agent-status" data-running="${status.running}" data-healthy="${status.healthy !== false}">
         Agent Windows: ${statusLabel}
       </p>
+      ${binaryMeta}
       ${uiSessionHtml}
       ${agentSessionHtml}
       ${mismatchHtml}

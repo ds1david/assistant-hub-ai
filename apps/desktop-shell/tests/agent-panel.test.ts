@@ -10,6 +10,10 @@ function baseStatus(over: Partial<AgentStatus> = {}): AgentStatus {
     lastError: null,
     agentSessionId: null,
     agentSessionSource: "unknown",
+    binaryPath: null,
+    binarySource: "missing",
+    agentVersion: null,
+    healthy: false,
     ...over,
   };
 }
@@ -186,6 +190,34 @@ describe("renderAgentPanel", () => {
     );
     expect(container.querySelector('[data-testid="agent-error"]')?.textContent).toBe(
       "binário assistant-hub-audio não encontrado",
+    );
+  });
+
+  it("shows binary source and version from 025 status fields", () => {
+    const container = document.createElement("div");
+    renderAgentPanel(
+      container,
+      {
+        status: baseStatus({
+          running: true,
+          controlMode: "Direct",
+          healthy: true,
+          binarySource: "sidecar",
+          agentVersion: "0.2.0",
+          binaryPath: "C:\\\\app\\\\assistant-hub-audio.exe",
+          agentSessionId: "s1",
+          agentSessionSource: "managed",
+        }),
+        activeSessionId: "s1",
+      },
+      { onStart: vi.fn(), onStop: vi.fn(), onRestart: vi.fn() },
+    );
+    expect(container.querySelector('[data-testid="agent-binary-source"]')?.textContent).toBe(
+      "sidecar",
+    );
+    expect(container.querySelector('[data-testid="agent-version"]')?.textContent).toBe("0.2.0");
+    expect(container.querySelector('[data-testid="agent-status"]')?.getAttribute("data-healthy")).toBe(
+      "true",
     );
   });
 });
