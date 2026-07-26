@@ -1,6 +1,7 @@
-// Lista / criar / selecionar sessão (FR-026 / FR-027 / FR-028).
+// Lista / criar / selecionar sessão (FR-026 / FR-027 / FR-028 / 021).
 import type { SessionSummary } from "./api-client";
 import { escapeHtml } from "./dom-utils";
+import { isSelectableSessionId } from "./session-selection";
 
 export interface SessionPickerView {
   sessions: SessionSummary[];
@@ -73,7 +74,7 @@ export function renderSessionPicker(
   container.querySelectorAll<HTMLButtonElement>('[data-action="select"]').forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-session-id");
-      if (id) {
+      if (id && isSelectableSessionId(id)) {
         callbacks.onSelect(id);
       }
     });

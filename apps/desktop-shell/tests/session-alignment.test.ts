@@ -31,6 +31,22 @@ describe("resolveAlignment", () => {
   it("returns mismatched when ids differ", () => {
     expect(resolveAlignment("s1", { running: true, agentSessionId: "s2" })).toBe("mismatched");
   });
+
+  it("mismatches UI UUID vs agent session-YYYYMMDD path id", () => {
+    expect(
+      resolveAlignment("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", {
+        running: true,
+        agentSessionId: "session-20260725-120000",
+      }),
+    ).toBe("mismatched");
+  });
+});
+
+describe("buildGuidanceCommand (021 FR-012)", () => {
+  it("includes --session with the active session id", () => {
+    const id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    expect(buildGuidanceCommand(id, "perfil.yaml")).toContain(`--session ${id}`);
+  });
 });
 
 describe("resolveAssistantEmptyKind (FR-010)", () => {

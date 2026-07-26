@@ -135,6 +135,43 @@ describe("renderAgentPanel", () => {
     expect(container.querySelector('[data-testid="agent-stop-button"]')).toBeNull();
   });
 
+  it("guidance command contains --session with full active id (021 FR-012)", () => {
+    const container = document.createElement("div");
+    const active = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    renderAgentPanel(
+      container,
+      {
+        status: baseStatus({
+          running: true,
+          controlMode: "Guided",
+          guidanceCommand: `assistant-hub-audio run --session ${active} --profile perfil.yaml`,
+        }),
+        activeSessionId: active,
+      },
+      { onStart: vi.fn(), onStop: vi.fn(), onRestart: vi.fn() },
+    );
+    const guidance = container.querySelector('[data-testid="agent-guidance"]')?.textContent ?? "";
+    expect(guidance).toContain(`--session ${active}`);
+  });
+
+  it("shows mismatch for agent STT-only path id vs UI UUID (021 FR-011 / SC-005)", () => {
+    const container = document.createElement("div");
+    renderAgentPanel(
+      container,
+      {
+        status: baseStatus({
+          running: true,
+          controlMode: "Direct",
+          agentSessionId: "session-20260725-120000",
+          agentSessionSource: "cmdline",
+        }),
+        activeSessionId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      },
+      { onStart: vi.fn(), onStop: vi.fn(), onRestart: vi.fn() },
+    );
+    expect(container.querySelector('[data-testid="session-mismatch-banner"]')).not.toBeNull();
+  });
+
   it("shows a specific error message when present (FR-008 legacy)", () => {
     const container = document.createElement("div");
     renderAgentPanel(
