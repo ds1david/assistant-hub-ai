@@ -44,7 +44,9 @@
 - associação de frames com trechos da conversa;
 - políticas de mascaramento de informações sensíveis.
 
-**P0 (issue #68 / specs/033):** contrato `visual.frame.v1`, ingestão session-core com consentimento + OCR stub + PII mask, painel shell. Captura DXGI/Tesseract real = follow-up.
+**P0 (issue #68 / specs/033):** contrato `visual.frame.v1`, ingestão session-core com consentimento + OCR stub + PII mask, painel shell.
+
+**P1 (issue #77):** captura real (DXGI) + OCR de produção (Tesseract/remoto policy); mantém consentimento e PII mask do P0.
 
 ## R5 — Desktop Distribution
 
