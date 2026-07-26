@@ -1,4 +1,6 @@
-# Quickstart: Qualidade de detecção de pergunta (023)
+# Quickstart: Qualidade de detecção de pergunta (issue #52)
+
+**Feature**: `specs/023-issue-52-question-detection-quality/`
 
 ## Pré-requisitos
 
@@ -8,18 +10,18 @@
   `samples/audio-profiles/conference-cam-endpointid.yaml`
 - **Mesmo sessionId** shell ↔ agent ↔ STT (header STT / sessão ativa no shell)
 
-## Onde ver a resposta do ChatGPT
+## Onde ver a resposta do modelo
 
 | Superfície | O que é |
 |------------|---------|
-| Desktop shell → **Assistente (respostas automáticas)** | Pergunta + resposta (ou erro) |
+| Desktop shell → **Assistente (respostas automáticas)** | Pergunta + resposta (ou erro de provedor) |
 | `http://localhost:8001` dashboard STT | Só transcript / sessionId / canais — **não** é o chat |
 
-## Phase A — Disparo lexical / entrevista (sem trocar Whisper)
+## Phase A — Disparo lexical / entrevista (sem trocar modelo STT)
 
 1. Suba o hub e o shell; crie/selecione sessão; inicie agent com o **UUID** da sessão ativa.
 2. No Assistente: ligue **automático**; origem **sistema** marcada.
-3. (Opcional) ligue **modo entrevista** para qualquer final system ≥8 chars.
+3. (Opcional) ligue **modo entrevista** para qualquer final system ≥ 8 chars.
 4. No áudio remoto, fale (e espere **final**):
    - *«Me conte sobre um projeto relevante com Java e Spring.»*
    - *«David, me descreva uma API REST que você implementou.»*
@@ -41,7 +43,7 @@
 cd apps/desktop-shell && npm test -- --run tests/assistant-auto.test.ts tests/assistant-prefs.test.ts tests/assistant-panel.test.ts
 ```
 
-## Phase B — A/B Whisper small vs medium
+## Phase B — A/B modelo STT small vs medium
 
 1. Baseline: `WHISPER_MODEL=small` no `.env`; recrie o container de transcription.
 2. Fale **3 frases fixas** no remoto (grave o texto exato no dashboard):
@@ -57,10 +59,11 @@ Hotwords: edite `config/whisper-hotwords.txt` (Spring, REST, session-core, …) 
 
 ## Phase C — Prosódia (quando implementado)
 
-1. `PROSODY_ENABLED=true` no serviço de transcrição; health `prosodyEnabled: true`.
-2. No shell: `useProsody` on; threshold default 0.65.
+1. `PROSODY_ENABLED=true` no **serviço de transcrição** (não no agent Windows); health `prosodyEnabled: true`.
+2. No shell: `useProsody` on; threshold default 0.65 (sem UI de limiar na v1).
 3. Fale yes/no **sem** `?` no texto se o ASR omitir: *«Você já usou Kafka em produção»* com entonação de pergunta.
 4. Esperado: se score ≥ threshold e origem system, dispara; se extrator off/falha, comportamento lexical inalterado.
+5. NFR-002: budget de CPU documentado em `research.md` **ou** nota “unmeasured; default off remains”.
 
 ## Critérios de aceite manual (resumo)
 

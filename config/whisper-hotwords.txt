@@ -1,13 +1,30 @@
 # Uma expressão por linha. Ajuste este arquivo ao vocabulário da sessão.
+# Amostra de entrevista técnica (023 / issue #52) — opt-in via WHISPER_HOTWORDS_FILE.
 cassetada
 Java
+Spring
 Spring Boot
 Spring Cloud
+REST
+API REST
 Maven
 Gradle
 Kafka
 Kubernetes
 Docker
 WSL
+session-core
+endpointId
+MMDevice
+WASAPI
+Microserviço
+monólito modular
+OpenAPI
+contrato
+pytest
+JUnit
 Mercado Livre
 FedEx
+Claro
+ChatGPT
+live-answer

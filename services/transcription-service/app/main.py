@@ -16,6 +16,7 @@ from .consolidation import TranscriptConsolidationRegistry
 from .echo_suppression import TranscriptEchoSuppressor
 from .engine import TranscriptionEngine
 from .metrics import LatencyMetricsRegistry
+from .prosody import estimate_prosody
 from .transcriber import StreamingTranscriber, WhisperEngine, transcribe_file
 
 LOGGER = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ def create_app(
             "beamSize": settings.whisper_beam_size,
             "hotwordsConfigured": bool(settings.resolved_hotwords()),
             "echoSuppressionEnabled": settings.echo_suppression_enabled,
+            "prosodyEnabled": settings.prosody_enabled,
         }
 
     @app.post("/v1/model/load")
@@ -170,6 +172,16 @@ def create_app(
                 "droppedWindows": dropped_windows,
                 "occurredAt": occurred_at.isoformat(),
             }
+            # Prosody only on Final when enabled; failures omit field (never drop event).
+            if final and settings.prosody_enabled:
+                prosody = await asyncio.to_thread(
+                    estimate_prosody,
+                    window,
+                    sample_rate=settings.sample_rate,
+                    end_window_ms=settings.prosody_end_window_ms,
+                )
+                if prosody is not None:
+                    event["prosody"] = prosody
             await websocket.send_json(event)
             await broadcaster.publish(event)
             # Ponto único de registro: uma amostra por evento entregue. O

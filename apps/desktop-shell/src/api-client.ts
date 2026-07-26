@@ -39,6 +39,13 @@ export interface SessionStatusResponse {
 
 export type FeedEntryKind = "Partial" | "Final";
 
+/** Optional prosody on Final events (023 FR-007); absent on partials / legacy feeds. */
+export interface TranscriptProsody {
+  questionScore?: number;
+  contour?: string;
+  f0EndSlopeSemitones?: number;
+}
+
 export interface TranscriptFeedEntry {
   eventId: string;
   channelId: string | null;
@@ -47,6 +54,7 @@ export interface TranscriptFeedEntry {
   text: string;
   kind: FeedEntryKind;
   occurredAt: string;
+  prosody?: TranscriptProsody | null;
 }
 
 export type ControlMode = "Direct" | "Guided";

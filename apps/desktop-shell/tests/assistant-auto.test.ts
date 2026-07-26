@@ -3,6 +3,7 @@ import {
   AssistantAutoController,
   buildInvokeInput,
   extractNewQuestions,
+  isQuestionCandidate,
   looksLikeQuestion,
   MAX_CONTEXT_CHARS,
   normalizeSourceType,
@@ -40,9 +41,12 @@ const systemOnlyPrefs: AssistantSessionPreferences = {
   autoEnabled: true,
   enabledSourceTypes: ["system"],
   inputMode: "question-only",
+  interviewMode: false,
+  useProsody: false,
+  prosodyThreshold: 0.65,
 };
 
-describe("looksLikeQuestion (FR-004)", () => {
+describe("looksLikeQuestion (FR-002)", () => {
   it("detects explicit question mark with min length", () => {
     expect(looksLikeQuestion("isso funciona de verdade?")).toBe(true);
   });
@@ -380,5 +384,75 @@ describe("AssistantAutoController", () => {
       expect(done.map((t) => t.answer).sort()).toEqual(["resposta A", "resposta B"]);
     });
     expect(invoke).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("isQuestionCandidate (FR-006 gate)", () => {
+  const basePrefs: AssistantSessionPreferences = { ...systemOnlyPrefs };
+
+  it("rejects partials even with interrogative text", () => {
+    expect(
+      isQuestionCandidate(
+        { kind: "Partial", text: "Me conte sobre um projeto relevante com Java", sourceType: "system" },
+        basePrefs,
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts lexical interview finals (FR-002)", () => {
+    expect(
+      isQuestionCandidate(
+        {
+          kind: "Final",
+          text: "Me conte sobre um projeto relevante com Java Spring",
+          sourceType: "system",
+        },
+        basePrefs,
+      ),
+    ).toBe(true);
+  });
+
+  it("interviewMode accepts system Final without prefix; not microphone", () => {
+    const prefs: AssistantSessionPreferences = { ...basePrefs, interviewMode: true };
+    const text = "Sobre o projeto na Claro, fale do seu papel.";
+    expect(
+      isQuestionCandidate({ kind: "Final", text, sourceType: "system" }, prefs),
+    ).toBe(true);
+    expect(
+      isQuestionCandidate({ kind: "Final", text, sourceType: "microphone" }, prefs),
+    ).toBe(false);
+    expect(
+      isQuestionCandidate({ kind: "Final", text, sourceType: "system" }, basePrefs),
+    ).toBe(false);
+  });
+
+  it("useProsody accepts high score when enabled; ignores when off", () => {
+    const text = "Voce ja usou Spring Boot em producao";
+    const entry = {
+      kind: "Final",
+      text,
+      sourceType: "system" as const,
+      prosody: { questionScore: 0.9 },
+    };
+    expect(isQuestionCandidate(entry, basePrefs)).toBe(false);
+    expect(
+      isQuestionCandidate(entry, { ...basePrefs, useProsody: true, prosodyThreshold: 0.65 }),
+    ).toBe(true);
+    expect(
+      isQuestionCandidate(entry, { ...basePrefs, useProsody: true, prosodyThreshold: 0.95 }),
+    ).toBe(false);
+  });
+
+  it("extractNewQuestions respects interviewMode", () => {
+    const prefs: AssistantSessionPreferences = { ...systemOnlyPrefs, interviewMode: true };
+    const entries = [
+      finalEntry({
+        eventId: "iv1",
+        text: "Sobre o projeto na Claro, fale do seu papel.",
+        sourceType: "system",
+      }),
+    ];
+    expect(extractNewQuestions(entries, new Set(), systemOnlyPrefs)).toHaveLength(0);
+    expect(extractNewQuestions(entries, new Set(), prefs)).toHaveLength(1);
   });
 });

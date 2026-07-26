@@ -34,6 +34,9 @@ public class TranscriptEventMapper {
         if (event.droppedWindows() != null) {
             payload.put("droppedWindows", event.droppedWindows());
         }
+        if (event.prosody() != null && !event.prosody().isEmpty()) {
+            payload.put("prosody", event.prosody());
+        }
 
         TranscriptEventV2.Device device = event.device();
         Map<String, String> correlation = new LinkedHashMap<>();

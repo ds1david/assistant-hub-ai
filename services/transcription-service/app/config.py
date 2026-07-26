@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     adaptive_window_stable_evaluations: int = 3
     adaptive_window_min_samples: int = 5
 
+    # Prosódia opcional no Final (023). Default off — não altera path de transcript.
+    prosody_enabled: bool = False
+    prosody_end_window_ms: int = 500
+
     model_cache_dir: Path = Path("/models")
     sample_rate: int = 16_000
     log_level: str = "INFO"

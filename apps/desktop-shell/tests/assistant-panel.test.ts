@@ -15,6 +15,8 @@ const callbacks = () => ({
   onToggleEnabled: vi.fn(),
   onToggleOrigin: vi.fn(),
   onInputModeChange: vi.fn(),
+  onToggleInterviewMode: vi.fn(),
+  onToggleUseProsody: vi.fn(),
   onResolveConflict: vi.fn(),
 });
 
@@ -54,7 +56,14 @@ describe("renderAssistantPanel", () => {
     const cbs = callbacks();
     const view: AssistantAutoView = {
       enabled: true,
-      prefs: { autoEnabled: true, enabledSourceTypes: ["system"], inputMode: "question-only" },
+      prefs: {
+        autoEnabled: true,
+        enabledSourceTypes: ["system"],
+        inputMode: "question-only",
+        interviewMode: false,
+        useProsody: false,
+        prosodyThreshold: 0.65,
+      },
       busy: true,
       turns: [
         {
@@ -195,7 +204,14 @@ describe("renderAssistantPanel", () => {
       container,
       {
         enabled: true,
-        prefs: { autoEnabled: true, enabledSourceTypes: ["system"], inputMode: "question-only" },
+        prefs: {
+          autoEnabled: true,
+          enabledSourceTypes: ["system"],
+          inputMode: "question-only",
+          interviewMode: false,
+          useProsody: false,
+          prosodyThreshold: 0.65,
+        },
         busy: false,
         turns: [
           {
@@ -226,5 +242,27 @@ describe("renderAssistantPanel", () => {
     expect(container.querySelector('[data-testid="assistant-conflict-running"]')?.textContent).not.toContain(
       "Em execução",
     );
+  });
+
+  it("wires interview mode and useProsody toggles", () => {
+    const container = document.createElement("div");
+    const cbs = callbacks();
+    renderAssistantPanel(container, emptyView, cbs);
+    const interview = container.querySelector<HTMLInputElement>(
+      '[data-testid="assistant-interview-mode"]',
+    );
+    const prosody = container.querySelector<HTMLInputElement>('[data-testid="assistant-use-prosody"]');
+    expect(interview).toBeTruthy();
+    expect(prosody).toBeTruthy();
+    if (interview) {
+      interview.checked = true;
+      interview.dispatchEvent(new Event("change"));
+    }
+    if (prosody) {
+      prosody.checked = true;
+      prosody.dispatchEvent(new Event("change"));
+    }
+    expect(cbs.onToggleInterviewMode).toHaveBeenCalledWith(true);
+    expect(cbs.onToggleUseProsody).toHaveBeenCalledWith(true);
   });
 });

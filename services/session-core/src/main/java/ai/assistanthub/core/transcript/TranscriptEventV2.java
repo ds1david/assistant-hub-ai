@@ -1,14 +1,18 @@
 package ai.assistanthub.core.transcript;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
+import java.util.Map;
 
 /**
  * Espelha contracts/transcript-event.v2.schema.json (P4 — sem duplicar regras de validação,
  * apenas a forma dos dados; a conformidade real é checada por {@link TranscriptEventValidator}).
+ * Campo {@code prosody} opcional (023 FR-007) — só em finals quando STT extrai score.
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record TranscriptEventV2(
         String type,
         String sessionId,
@@ -22,7 +26,8 @@ public record TranscriptEventV2(
         int latencyMs,
         Double audioSeconds,
         Integer droppedWindows,
-        Instant occurredAt) {
+        Instant occurredAt,
+        Map<String, Object> prosody) {
 
     @JsonCreator
     public TranscriptEventV2(
@@ -38,7 +43,8 @@ public record TranscriptEventV2(
             @JsonProperty("latencyMs") int latencyMs,
             @JsonProperty("audioSeconds") Double audioSeconds,
             @JsonProperty("droppedWindows") Integer droppedWindows,
-            @JsonProperty("occurredAt") Instant occurredAt) {
+            @JsonProperty("occurredAt") Instant occurredAt,
+            @JsonProperty("prosody") Map<String, Object> prosody) {
         this.type = type;
         this.sessionId = sessionId;
         this.channelId = channelId;
@@ -52,6 +58,7 @@ public record TranscriptEventV2(
         this.audioSeconds = audioSeconds;
         this.droppedWindows = droppedWindows;
         this.occurredAt = occurredAt;
+        this.prosody = prosody;
     }
 
     public record Device(

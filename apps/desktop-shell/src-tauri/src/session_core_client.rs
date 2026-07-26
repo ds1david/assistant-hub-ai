@@ -356,6 +356,18 @@ pub enum FeedEntryKind {
     Final,
 }
 
+/// Optional prosody on Final events (023 FR-007); omitted when absent.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptProsody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub question_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contour: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub f0_end_slope_semitones: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptFeedEntry {
@@ -366,6 +378,8 @@ pub struct TranscriptFeedEntry {
     pub text: String,
     pub kind: FeedEntryKind,
     pub occurred_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prosody: Option<TranscriptProsody>,
 }
 
 /// Filtra eventos de transcrição (`transcript.partial.v2`/`transcript.final.v2`), mapeia para
@@ -391,6 +405,17 @@ pub fn transcript_feed_entries(events: &[HubEvent]) -> Vec<TranscriptFeedEntry> 
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            let prosody = event.payload.get("prosody").and_then(|v| {
+                let obj = v.as_object()?;
+                Some(TranscriptProsody {
+                    question_score: obj.get("questionScore").and_then(|x| x.as_f64()),
+                    contour: obj
+                        .get("contour")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    f0_end_slope_semitones: obj.get("f0EndSlopeSemitones").and_then(|x| x.as_f64()),
+                })
+            });
             Some(TranscriptFeedEntry {
                 event_id: event.id.clone(),
                 channel_id: event.channel_id(),
@@ -399,6 +424,7 @@ pub fn transcript_feed_entries(events: &[HubEvent]) -> Vec<TranscriptFeedEntry> 
                 text,
                 kind,
                 occurred_at: event.occurred_at.clone(),
+                prosody,
             })
         })
         .collect();
@@ -598,5 +624,53 @@ mod tests {
         let feed = transcript_feed_entries(&events);
 
         assert_eq!(feed.len(), 1);
+    }
+
+    #[test]
+    fn transcript_feed_entries_maps_prosody_from_payload_and_omits_when_absent() {
+        let mut with_prosody = event(
+            "e-prosody",
+            "sys-1",
+            "system",
+            "Áudio remoto",
+            "2026-07-25T12:00:00Z",
+            "voce ja usou spring boot",
+            "transcript.final.v2",
+        );
+        with_prosody.payload.insert(
+            "prosody".to_string(),
+            serde_json::json!({
+                "questionScore": 0.78,
+                "contour": "rising",
+                "f0EndSlopeSemitones": 2.1
+            }),
+        );
+        let without = event(
+            "e-plain",
+            "sys-1",
+            "system",
+            "Áudio remoto",
+            "2026-07-25T12:00:01Z",
+            "afirmacao sem prosodia",
+            "transcript.final.v2",
+        );
+
+        let feed = transcript_feed_entries(&[with_prosody, without]);
+        assert_eq!(feed.len(), 2);
+
+        let scored = feed.iter().find(|e| e.event_id == "e-prosody").unwrap();
+        let prosody = scored
+            .prosody
+            .as_ref()
+            .expect("prosody must be mapped from payload");
+        assert!((prosody.question_score.unwrap() - 0.78).abs() < f64::EPSILON);
+        assert_eq!(prosody.contour.as_deref(), Some("rising"));
+        assert!((prosody.f0_end_slope_semitones.unwrap() - 2.1).abs() < f64::EPSILON);
+
+        let plain = feed.iter().find(|e| e.event_id == "e-plain").unwrap();
+        assert!(
+            plain.prosody.is_none(),
+            "events without payload.prosody must omit the field"
+        );
     }
 }
