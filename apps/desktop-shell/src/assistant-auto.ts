@@ -1,5 +1,6 @@
 // Assistente automático a partir do transcript (perguntas finais → rota live-answer).
 // 023: FR-002 lexical expandido, FR-004 interviewMode, FR-006 isQuestionCandidate (OR gate).
+// 028: contexto mic+system rotulado, includeMicrophoneInContext, instrução 1ª pessoa.
 // Cancelamento é lógico (resposta obsoleta descartada) — invoke Tauri/HTTP sem abort token.
 import type { InvocationResult, TranscriptFeedEntry } from "./api-client";
 import {
@@ -122,6 +123,95 @@ const ALL_PREFIXES: readonly string[] = [...PT_PREFIXES, ...EN_PREFIXES];
 
 export const MAX_CONTEXT_FINAL_SEGMENTS = 12;
 export const MAX_CONTEXT_CHARS = 4000;
+
+/** Rótulos canônicos no bloco de contexto (028 FR-007). */
+export const CONTEXT_LABEL_SYSTEM = "Entrevistador";
+export const CONTEXT_LABEL_MICROPHONE = "Candidato (eu)";
+
+/**
+ * Instrução fixa de modo entrevista (028 FR-009–011).
+ * Prefixa o input do invoke quando interviewMode=true.
+ */
+export const INTERVIEW_ANSWER_INSTRUCTION = [
+  "Instruções de resposta (modo entrevista):",
+  "- Responda em 1ª pessoa (eu/meu/minha), em português do Brasil natural.",
+  "- Escreva como fala oral pronta para eu ler em voz alta (~30 a 90 segundos).",
+  "- Saída: SOMENTE o texto da fala. Sem prefácio de assistente, sem markdown pesado, sem listas longas.",
+  "- Não diga “Claro!”, “Como candidato…”, “Você poderia dizer…”, “Responda assim…”.",
+  "- Não invente empresas, números, datas ou fatos fora do contexto fornecido.",
+  "- Se faltar contexto, diga de forma curta e honesta o que consegue afirmar.",
+].join("\n");
+
+export interface RecentFinalSegment {
+  eventId: string;
+  text: string;
+  sourceType: CanonicalSourceType | null;
+}
+
+export interface BuildInvokeInputOptions {
+  excludeEventId?: string;
+  /** Default true when omitted. */
+  includeMicrophoneInContext?: boolean;
+  /** Default false when omitted. */
+  interviewMode?: boolean;
+}
+
+/**
+ * Detector de padrões de meta-assistente (028 FR-012).
+ * Uso em testes; runtime NÃO deve rejeitar a resposta do modelo (FR-012b).
+ */
+export function hasMetaAssistantStyle(text: string): boolean {
+  const t = text.trim();
+  if (!t) {
+    return false;
+  }
+  // Prefácios no início
+  if (/^(Claro!|Claro,|Com certeza!)/i.test(t)) {
+    return true;
+  }
+  const lower = t.toLowerCase();
+  const phrases = [
+    "como candidato",
+    "você poderia dizer",
+    "você deve responder",
+    "na sua resposta",
+    "responda assim",
+    "aqui está uma sugestão de resposta",
+  ];
+  for (const p of phrases) {
+    if (lower.includes(p)) {
+      return true;
+    }
+  }
+  // Markdown pesado: ≥4 bullets consecutivos ou headings
+  if (/(^|\n)#{1,2}\s/m.test(t)) {
+    return true;
+  }
+  const lines = t.split(/\r?\n/);
+  let streak = 0;
+  for (const line of lines) {
+    if (/^\s*[-*]\s+/.test(line)) {
+      streak += 1;
+      if (streak >= 4) {
+        return true;
+      }
+    } else if (line.trim() !== "") {
+      streak = 0;
+    }
+  }
+  return false;
+}
+
+function contextLabelFor(sourceType: CanonicalSourceType): string {
+  return sourceType === "system" ? CONTEXT_LABEL_SYSTEM : CONTEXT_LABEL_MICROPHONE;
+}
+
+function withInterviewInstruction(body: string, interviewMode: boolean): string {
+  if (!interviewMode) {
+    return body;
+  }
+  return `${INTERVIEW_ANSWER_INSTRUCTION}\n\n${body}`;
+}
 
 /** Remove vocativo curto no início: "David, me conte…" → "me conte…". */
 export function stripLeadingVocative(lower: string): string {
@@ -286,48 +376,76 @@ export function extractNewQuestions(
   return out;
 }
 
-/** Monta input do invoke conforme inputMode e janela de contexto (FR-022–024). */
+/**
+ * Monta input do invoke (019 FR-022–024 + 028 contexto rotulado / instrução entrevista).
+ * question-only: sem contexto; com interviewMode ainda prefixa instrução (028 FR-003).
+ */
 export function buildInvokeInput(
   question: string,
-  recentFinals: readonly { eventId: string; text: string }[],
+  recentFinals: readonly RecentFinalSegment[],
   inputMode: InputMode,
-  excludeEventId?: string,
+  options: BuildInvokeInputOptions = {},
 ): string {
+  const excludeEventId = options.excludeEventId;
+  const includeMic = options.includeMicrophoneInContext !== false;
+  const interviewMode = Boolean(options.interviewMode);
+
   if (inputMode === "question-only") {
-    return question;
+    return withInterviewInstruction(question, interviewMode);
   }
-  const prior = recentFinals.filter((f) => f.eventId !== excludeEventId);
-  // Mais recentes no fim da lista de feed → pega os últimos N, omite antigos primeiro.
-  const window: string[] = [];
+
+  const prior = recentFinals.filter((f) => {
+    if (f.eventId === excludeEventId) {
+      return false;
+    }
+    const origin = f.sourceType;
+    if (origin !== "system" && origin !== "microphone") {
+      return false; // FR-007b: omit unknown
+    }
+    if (origin === "microphone" && !includeMic) {
+      return false;
+    }
+    return true;
+  });
+
+  // Mais recentes no fim → pega últimos N; labels contam no orçamento de chars.
+  const window: { label: string; text: string }[] = [];
   let chars = 0;
   for (let i = prior.length - 1; i >= 0 && window.length < MAX_CONTEXT_FINAL_SEGMENTS; i--) {
     const t = prior[i].text.trim();
     if (!t) {
       continue;
     }
-    if (chars + t.length > MAX_CONTEXT_CHARS && window.length > 0) {
+    const origin = prior[i].sourceType as CanonicalSourceType;
+    const label = contextLabelFor(origin);
+    const lineBody = `${label}: ${t}`;
+    if (chars + lineBody.length > MAX_CONTEXT_CHARS && window.length > 0) {
       break;
     }
-    window.unshift(t);
-    chars += t.length;
+    window.unshift({ label, text: t });
+    chars += lineBody.length;
   }
+
+  let body: string;
   if (window.length === 0) {
-    return question;
+    body = question;
+  } else {
+    body = [
+      "Contexto recente do transcript:",
+      ...window.map((w, i) => `${i + 1}. ${w.label}: ${w.text}`),
+      "",
+      "Pergunta atual:",
+      question,
+    ].join("\n");
   }
-  return [
-    "Contexto recente do transcript:",
-    ...window.map((t, i) => `${i + 1}. ${t}`),
-    "",
-    "Pergunta atual:",
-    question,
-  ].join("\n");
+  return withInterviewInstruction(body, interviewMode);
 }
 
 export class AssistantAutoController {
   private prefs: AssistantSessionPreferences = clonePrefs(DEFAULT_ASSISTANT_PREFS);
   private turns: AssistantTurn[] = [];
   private seenEventIds = new Set<string>();
-  private recentFinals: { eventId: string; text: string }[] = [];
+  private recentFinals: RecentFinalSegment[] = [];
   private generation = 0;
   private runningTurnId: string | null = null;
   private conflict: AssistantConflict | null = null;
@@ -400,7 +518,11 @@ export class AssistantAutoController {
     for (const entry of entries) {
       this.seenEventIds.add(entry.eventId);
       if (entry.kind === "Final" && entry.text?.trim()) {
-        this.trackFinal(entry.eventId, entry.text.trim());
+        this.trackFinal(
+          entry.eventId,
+          entry.text.trim(),
+          normalizeSourceType(entry.sourceType),
+        );
       }
     }
   }
@@ -409,7 +531,11 @@ export class AssistantAutoController {
   ingestTranscript(entries: TranscriptFeedEntry[]): void {
     for (const entry of entries) {
       if (entry.kind === "Final" && entry.text?.trim()) {
-        this.trackFinal(entry.eventId, entry.text.trim());
+        this.trackFinal(
+          entry.eventId,
+          entry.text.trim(),
+          normalizeSourceType(entry.sourceType),
+        );
       }
     }
     const candidates = extractNewQuestions(entries, this.seenEventIds, this.prefs);
@@ -454,11 +580,15 @@ export class AssistantAutoController {
     }
   }
 
-  private trackFinal(eventId: string, text: string): void {
+  private trackFinal(
+    eventId: string,
+    text: string,
+    sourceType: CanonicalSourceType | null,
+  ): void {
     if (this.recentFinals.some((f) => f.eventId === eventId)) {
       return;
     }
-    this.recentFinals.push({ eventId, text });
+    this.recentFinals.push({ eventId, text, sourceType });
     // Limite generoso em memória; builder aplica 12/4000
     if (this.recentFinals.length > 200) {
       this.recentFinals = this.recentFinals.slice(-100);
@@ -544,7 +674,11 @@ export class AssistantAutoController {
       candidate.text,
       this.recentFinals,
       this.prefs.inputMode,
-      candidate.eventId,
+      {
+        excludeEventId: candidate.eventId,
+        includeMicrophoneInContext: this.prefs.includeMicrophoneInContext,
+        interviewMode: this.prefs.interviewMode,
+      },
     );
 
     try {

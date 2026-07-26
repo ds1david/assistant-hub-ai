@@ -161,8 +161,32 @@ Instalador: `cargo tauri build --features gui` — artefatos em `src-tauri\targe
 # ou: assistant-hub-audio run --session <uuid-da-sessao-ativa> --profile <perfil.yaml>
 ```
 
-8. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** elegíveis (partials **não** disparam — empty state «aguardando trecho final»). O STT emite `transcript.final.v2` ao **fim de utterance** (pausa ~1 janela de silêncio/estabilidade de texto; default `FINALIZATION_IDLE_WINDOWS=1`), não só ao desconectar o agent — sem Final na sessão o Assistente permanece em awaiting_final. Opcional: **modo entrevista** (todo Final system ≥ 8 chars) e **usar prosódia** (score de entonação no Final quando o STT enviar `prosody`). Validação: [specs/024-issue-55-stt-final-utterance/quickstart.md](../../specs/024-issue-55-stt-final-utterance/quickstart.md).
+8. Painel **Assistente**: automático off por default; origens de **disparo** default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** elegíveis (partials **não** disparam — empty state «aguardando trecho final»). O STT emite `transcript.final.v2` ao **fim de utterance** (pausa ~1 janela de silêncio/estabilidade de texto; default `FINALIZATION_IDLE_WINDOWS=1`), não só ao desconectar o agent — sem Final na sessão o Assistente permanece em awaiting_final. Opcional: **modo entrevista** (todo Final system ≥ 8 chars **e** resposta em **1ª pessoa** pronta para leitura) e **usar prosódia** (score de entonação no Final quando o STT enviar `prosody`). Preferência **incluir minha voz no contexto** (default **ON**): finais do **microfone** entram no pedido ao modelo **sem** disparar automático. Validação Final: [specs/024-issue-55-stt-final-utterance/quickstart.md](../../specs/024-issue-55-stt-final-utterance/quickstart.md). Modo entrevista/contexto: [specs/028-issue-61-live-answer-interview-mode/quickstart.md](../../specs/028-issue-61-live-answer-interview-mode/quickstart.md).
 9. Preferências do Assistente: `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
+
+### Disparo ≠ contexto (issue #61)
+
+| Papel | Controle na UI | Default |
+|-------|----------------|---------|
+| **Disparo** (gera interação automática) | Origens que disparam (`system` / `microphone`) | só **sistema** |
+| **Contexto** (texto no pedido ao modelo) | Modo de entrada + **incluir minha voz no contexto** | pergunta + contexto recente; mic **ON** |
+
+- Final no **mic** com default de disparo **não** inicia geração.
+- Com contexto recente e “incluir minha voz” ON, o payload rotula trechos: `Entrevistador:` (system) e `Candidato (eu):` (microphone).
+- **Modo entrevista** ON: instrução de 1ª pessoa no input; resposta no painel Assistente (não no :8001).
+
+### Latência percebida (elos e knobs de entrevista)
+
+| Elo | O que afeta | Knob / nota |
+|-----|-------------|-------------|
+| Janela STT | ~3,2 s por janela de áudio | config do serviço de transcrição |
+| Final após pausa | tempo até `transcript.final.v2` | `FINALIZATION_IDLE_WINDOWS=1` (default) |
+| Modelo Whisper | WER vs velocidade | `WHISPER_MODEL=small` (default); `base` mais rápido / menos jargão |
+| Invoke LLM | geração da resposta | modelo de baixa latência na rota `live-answer` do perfil de provedores |
+| Fallback de provedor | cauda se primário falhar | ordem de fallback no perfil |
+| Partial → invoke | **proibido** | shell só Final |
+
+O painel mostra **latência por turn** (`latencyMs`) quando o hub devolve o valor. Não inventa métricas.
 
 ### Onde ver a resposta do modelo (não é o dashboard STT)
 

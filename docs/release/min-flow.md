@@ -16,6 +16,8 @@ Entrada: [README.md](../../README.md) → esta página.
 
 Operação diária / pós-reboot (scripts, health checks, armadilhas): [docs/development/running.md](../development/running.md).
 
+Modo entrevista (contexto mic+system, 1ª pessoa, latência): [specs/028-issue-61-live-answer-interview-mode/quickstart.md](../../specs/028-issue-61-live-answer-interview-mode/quickstart.md).
+
 ---
 
 ## Fronteira WSL vs Windows

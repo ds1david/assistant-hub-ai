@@ -38,6 +38,11 @@ Defaults adotados nesta spec a partir do pedido do usuário e do estado do produ
 - **019 FR-004** (heurística lexical canônica original desta spec) fica **superseded no shell** pela **FR-002** de `specs/023-issue-52-question-detection-quality/` (imperativos de entrevista, vocativo, word boundary, segmentos após `.!`). Orquestração de turns, conflito cancel/wait, rota `live-answer` e defaults de privacidade (auto off) **permanecem** definidos aqui.
 - Preferências adicionais (`interviewMode`, `useProsody`, `prosodyThreshold`) e gate multimodal: ver 023.
 
+### Session 2026-07-26 (028 interview context / style)
+
+- No modo **pergunta + contexto recente**, o builder de input **pode** incluir finais `microphone` além de `system` quando a preferência **incluir minha voz no contexto** está ON (default ON) — ver `specs/028-issue-61-live-answer-interview-mode/`. **Disparo** continua filtrado só por `enabledSourceTypes`.
+- Com `interviewMode` ON, o input do invoke recebe bloco de instrução de resposta em **1ª pessoa** (028).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Ver respostas automáticas no shell a partir do transcript (Priority: P1)

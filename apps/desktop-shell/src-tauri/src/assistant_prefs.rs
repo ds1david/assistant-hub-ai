@@ -1,4 +1,4 @@
-//! Preferências do Assistente por sessão (JSON local, FR-025). Sem segredos.
+//! Preferências do Assistente por sessão (JSON local, FR-025 / 028). Sem segredos.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -20,10 +20,17 @@ pub struct AssistantSessionPreferences {
     /// [0.0, 1.0]; default 0.65 (no dedicated UI control in v1).
     #[serde(default = "default_prosody_threshold")]
     pub prosody_threshold: f64,
+    /// 028: include microphone Finals in context builder. Default true when missing.
+    #[serde(default = "default_include_microphone_in_context")]
+    pub include_microphone_in_context: bool,
 }
 
 fn default_prosody_threshold() -> f64 {
     0.65
+}
+
+fn default_include_microphone_in_context() -> bool {
+    true
 }
 
 impl Default for AssistantSessionPreferences {
@@ -35,6 +42,7 @@ impl Default for AssistantSessionPreferences {
             interview_mode: false,
             use_prosody: false,
             prosody_threshold: default_prosody_threshold(),
+            include_microphone_in_context: default_include_microphone_in_context(),
         }
     }
 }
@@ -108,6 +116,8 @@ mod tests {
         assert!(!prefs.auto_enabled);
         assert_eq!(prefs.enabled_source_types, vec!["system".to_string()]);
         assert_eq!(prefs.input_mode, "question-plus-recent-context");
+        assert!(prefs.include_microphone_in_context);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
@@ -125,6 +135,7 @@ mod tests {
                 interview_mode: true,
                 use_prosody: false,
                 prosody_threshold: 0.65,
+                include_microphone_in_context: false,
             },
         )
         .unwrap();
@@ -138,6 +149,7 @@ mod tests {
                 interview_mode: false,
                 use_prosody: true,
                 prosody_threshold: 0.8,
+                include_microphone_in_context: true,
             },
         )
         .unwrap();
@@ -147,9 +159,11 @@ mod tests {
         assert!(s.auto_enabled);
         assert_eq!(s.input_mode, "question-only");
         assert!(s.interview_mode);
+        assert!(!s.include_microphone_in_context);
         assert!(!t.auto_enabled);
         assert_eq!(t.enabled_source_types, vec!["microphone".to_string()]);
         assert!(t.use_prosody);
+        assert!(t.include_microphone_in_context);
         assert!((t.prosody_threshold - 0.8).abs() < f64::EPSILON);
 
         let _ = fs::remove_file(&path);
@@ -174,6 +188,8 @@ mod tests {
         assert!(!prefs.interview_mode);
         assert!(!prefs.use_prosody);
         assert!((prefs.prosody_threshold - 0.65).abs() < f64::EPSILON);
+        // 028: missing field → true
+        assert!(prefs.include_microphone_in_context);
         let _ = fs::remove_file(&path);
     }
 }
