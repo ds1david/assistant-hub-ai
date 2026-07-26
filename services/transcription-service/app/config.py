@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     prosody_enabled: bool = False
     prosody_end_window_ms: int = 500
 
+    # Fechamento de utterance → transcript.final.v2 (issue #55).
+    # idle_windows: janelas consecutivas sem texto novo após open.
+    # max_open_seconds: rede de segurança para monólogo contínuo.
+    finalization_idle_windows: int = 1
+    finalization_max_open_seconds: float = 45.0
+
     model_cache_dir: Path = Path("/models")
     sample_rate: int = 16_000
     log_level: str = "INFO"
@@ -81,6 +87,20 @@ class Settings(BaseSettings):
             "português": "pt",
         }
         return aliases.get(normalized.lower(), normalized)
+
+    @field_validator("finalization_idle_windows")
+    @classmethod
+    def validate_finalization_idle_windows(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("finalization_idle_windows must be >= 1")
+        return value
+
+    @field_validator("finalization_max_open_seconds")
+    @classmethod
+    def validate_finalization_max_open_seconds(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("finalization_max_open_seconds must be > 0")
+        return value
 
     def resolved_hotwords(self) -> str | None:
         values: list[str] = []

@@ -161,7 +161,7 @@ Instalador: `cargo tauri build --features gui` — artefatos em `src-tauri\targe
 # ou: assistant-hub-audio run --session <uuid-da-sessao-ativa> --profile <perfil.yaml>
 ```
 
-8. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** elegíveis (partials **não** disparam — empty state «aguardando trecho final»). Opcional: **modo entrevista** (todo Final system ≥ 8 chars) e **usar prosódia** (score de entonação no Final quando o STT enviar `prosody`).
+8. Painel **Assistente**: automático off por default; origens default só **sistema**; modo **pergunta + contexto recente**. Rota: `live-answer` / `chat`. Disparo só em trechos **finais** elegíveis (partials **não** disparam — empty state «aguardando trecho final»). O STT emite `transcript.final.v2` ao **fim de utterance** (pausa ~1 janela de silêncio/estabilidade de texto; default `FINALIZATION_IDLE_WINDOWS=1`), não só ao desconectar o agent — sem Final na sessão o Assistente permanece em awaiting_final. Opcional: **modo entrevista** (todo Final system ≥ 8 chars) e **usar prosódia** (score de entonação no Final quando o STT enviar `prosody`). Validação: [specs/024-issue-55-stt-final-utterance/quickstart.md](../../specs/024-issue-55-stt-final-utterance/quickstart.md).
 9. Preferências do Assistente: `%APPDATA%\…\assistant-prefs.json` (por `sessionId`), sem segredos.
 
 ### Onde ver a resposta do modelo (não é o dashboard STT)
@@ -194,6 +194,7 @@ curl -s http://localhost:8001/health | jq '{model, modelLoaded, hotwordsConfigur
 - **Rollback**: `WHISPER_MODEL=small` + recriar o container.
 - **Hotwords**: `config/whisper-hotwords.txt` (Spring, REST, session-core, …).
 - **Prosódia** (opcional, default off): `PROSODY_ENABLED=true` no serviço de transcrição; health expõe `prosodyEnabled`. Extração **no STT**, não no agent Windows.
+- **Final de utterance** (issue #55): `FINALIZATION_IDLE_WINDOWS=1` (janelas sem texto novo para fechar) e `FINALIZATION_MAX_OPEN_SECONDS=45` (timeout de monólogo). Health expõe `finalizationIdleWindows` e `finalizationMaxOpenSeconds`.
 
 **Verificação:** janela abre; lista de sessões via `GET /api/sessions` (só session-core); clique/criar define «Sessão ativa» com UUID completo; agent e UI com o **mesmo** sessionId (sem banner de mismatch); salvar provedor **sem** HTTP 500; com automático on + final elegível → interação no **Assistente** (ou erro de provedor legível) — **não** no browser :8001.
 
