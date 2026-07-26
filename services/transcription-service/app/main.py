@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,7 +18,8 @@ from .echo_suppression import TranscriptEchoSuppressor
 from .engine import TranscriptionEngine
 from .metrics import LatencyMetricsRegistry
 from .prosody import estimate_prosody
-from .transcriber import StreamingTranscriber, WhisperEngine, transcribe_file
+from .transcriber import StreamingTranscriber, TranscriptionResult, WhisperEngine, transcribe_file
+from .utterance import FinalizerAction, UtteranceFinalizer
 
 LOGGER = logging.getLogger(__name__)
 STATIC_INDEX = Path(__file__).with_name("static") / "index.html"
@@ -72,6 +74,8 @@ def create_app(
             "hotwordsConfigured": bool(settings.resolved_hotwords()),
             "echoSuppressionEnabled": settings.echo_suppression_enabled,
             "prosodyEnabled": settings.prosody_enabled,
+            "finalizationIdleWindows": settings.finalization_idle_windows,
+            "finalizationMaxOpenSeconds": settings.finalization_max_open_seconds,
         }
 
     @app.post("/v1/model/load")
@@ -112,11 +116,18 @@ def create_app(
 
         await websocket.accept()
         transcriber = StreamingTranscriber(settings, engine)
+        finalizer = UtteranceFinalizer(
+            idle_windows=settings.finalization_idle_windows,
+            max_open_seconds=settings.finalization_max_open_seconds,
+        )
         adaptive_window = (
             AdaptiveWindowChannel(settings) if settings.adaptive_window_enabled else None
         )
-        windows: asyncio.Queue[tuple[bytes, bool] | None] = asyncio.Queue(maxsize=2)
+        # (pcm_window | None, is_disconnect_flush). None window = disconnect-only tick.
+        windows: asyncio.Queue[tuple[bytes | None, bool] | None] = asyncio.Queue(maxsize=2)
         dropped_windows = 0
+        last_result: TranscriptionResult | None = None
+        last_window: bytes | None = None
         LOGGER.info(
             "Audio channel connected session=%s channel=%s source_type=%s device=(%s) %s endpoint_id=%s",
             session_id,
@@ -127,32 +138,15 @@ def create_app(
             endpoint_id,
         )
 
-        async def emit(window: bytes, final: bool = False) -> None:
-            result = await asyncio.to_thread(transcriber.transcribe_pcm, window)
-            if result is None:
-                return
-            if source_type == "microphone" and settings.echo_suppression_enabled:
-                # Let the cleaner system-audio channel finish first so a physically
-                # echoed microphone transcript can be recognized as a duplicate.
-                await asyncio.sleep(settings.echo_suppression_mic_delay_ms / 1000.0)
-
-            echo = echo_suppressor.evaluate(
-                session_id=session_id,
-                source_type=source_type,
-                text=result.text,
-            )
-            if echo.suppressed:
-                LOGGER.info(
-                    "Suppressed microphone echo session=%s channel=%s similarity=%.3f text=%r matched=%r",
-                    session_id,
-                    channel_id,
-                    echo.similarity,
-                    result.text,
-                    echo.matched_text,
-                )
-                return
-
+        async def publish_transcript(
+            *,
+            text: str,
+            final: bool,
+            result: TranscriptionResult | None,
+            window_for_prosody: bytes | None,
+        ) -> None:
             occurred_at = datetime.now(timezone.utc)
+            latency_ms = result.latency_ms if result is not None else 0
             event = {
                 "type": "transcript.final.v2" if final else "transcript.partial.v2",
                 "sessionId": session_id,
@@ -164,25 +158,36 @@ def create_app(
                     "name": device_name,
                     "endpointId": endpoint_id,
                 },
-                "text": result.text,
-                "language": result.language,
-                "languageProbability": result.language_probability,
-                "latencyMs": result.latency_ms,
-                "audioSeconds": result.audio_seconds,
+                "text": text,
+                "language": result.language if result is not None else None,
+                "languageProbability": (
+                    result.language_probability if result is not None else None
+                ),
+                "latencyMs": latency_ms,
+                "audioSeconds": result.audio_seconds if result is not None else 0.0,
                 "droppedWindows": dropped_windows,
                 "occurredAt": occurred_at.isoformat(),
             }
             # Prosody only on Final when enabled; failures omit field (never drop event).
-            if final and settings.prosody_enabled:
+            if final and settings.prosody_enabled and window_for_prosody is not None:
                 prosody = await asyncio.to_thread(
                     estimate_prosody,
-                    window,
+                    window_for_prosody,
                     sample_rate=settings.sample_rate,
                     end_window_ms=settings.prosody_end_window_ms,
                 )
                 if prosody is not None:
                     event["prosody"] = prosody
-            await websocket.send_json(event)
+            # Client may already be gone on disconnect flush; still fan-out + metrics.
+            try:
+                await websocket.send_json(event)
+            except Exception:
+                LOGGER.debug(
+                    "Audio client closed before event delivery session=%s channel=%s final=%s",
+                    session_id,
+                    channel_id,
+                    final,
+                )
             await broadcaster.publish(event)
             # Ponto único de registro: uma amostra por evento entregue. O
             # fan-out do broadcaster repete o mesmo evento por cliente e não
@@ -192,9 +197,11 @@ def create_app(
                 channel_id=channel_id,
                 source_type=source_type,
                 label=label,
-                latency_ms=result.latency_ms,
+                latency_ms=latency_ms,
             )
-            if adaptive_window is not None:
+            # Adaptive window only on partials with a live transcription result.
+            # Finals (idle/disconnect) reuse last meta and must not re-step the window.
+            if adaptive_window is not None and result is not None and not final:
                 session_snapshot = metrics.session_snapshot(session_id)
                 channel_snapshot = next(
                     (
@@ -230,9 +237,111 @@ def create_app(
                 channel_id=channel_id,
                 source_type=source_type,
                 label=label,
-                text=result.text,
+                text=text,
                 occurred_at=occurred_at,
             )
+
+        async def apply_action(
+            action: FinalizerAction,
+            *,
+            result: TranscriptionResult | None = None,
+            window_for_prosody: bytes | None = None,
+        ) -> None:
+            if action.kind == "none":
+                return
+            if action.kind == "emit_partial":
+                await publish_transcript(
+                    text=action.text,
+                    final=False,
+                    result=result,
+                    window_for_prosody=None,
+                )
+                return
+            # emit_final: prefer live result meta; else last useful window meta
+            meta = result if result is not None else last_result
+            prosody_window = (
+                window_for_prosody if window_for_prosody is not None else last_window
+            )
+            await publish_transcript(
+                text=action.text,
+                final=True,
+                result=meta,
+                window_for_prosody=prosody_window,
+            )
+            LOGGER.info(
+                "Utterance final session=%s channel=%s reason=%s finals=%s idle_closes=%s max_open_closes=%s",
+                session_id,
+                channel_id,
+                action.reason,
+                finalizer.finals_emitted,
+                finalizer.idle_closes,
+                finalizer.max_open_closes,
+            )
+
+        async def emit(window: bytes | None, *, disconnect: bool = False) -> None:
+            nonlocal last_result, last_window
+            now = time.monotonic()
+
+            # Max-open safety net before this window's evaluation.
+            await apply_action(finalizer.on_tick(now))
+
+            # Pure disconnect tick (no residual PCM): finalize open utterance once.
+            if window is None:
+                if disconnect:
+                    await apply_action(
+                        finalizer.on_disconnect(residual_text=None, now=now)
+                    )
+                return
+
+            result = await asyncio.to_thread(transcriber.transcribe_pcm, window)
+
+            if result is None:
+                await apply_action(finalizer.on_no_result(now))
+                if disconnect:
+                    await apply_action(
+                        finalizer.on_disconnect(residual_text=None, now=now)
+                    )
+                return
+
+            if source_type == "microphone" and settings.echo_suppression_enabled:
+                # Let the cleaner system-audio channel finish first so a physically
+                # echoed microphone transcript can be recognized as a duplicate.
+                await asyncio.sleep(settings.echo_suppression_mic_delay_ms / 1000.0)
+
+            echo = echo_suppressor.evaluate(
+                session_id=session_id,
+                source_type=source_type,
+                text=result.text,
+            )
+            if echo.suppressed:
+                LOGGER.info(
+                    "Suppressed microphone echo session=%s channel=%s similarity=%.3f text=%r matched=%r",
+                    session_id,
+                    channel_id,
+                    echo.similarity,
+                    result.text,
+                    echo.matched_text,
+                )
+                # R8: suppressed text does not call on_text and does not advance idle.
+                if disconnect:
+                    await apply_action(
+                        finalizer.on_disconnect(residual_text=None, now=now)
+                    )
+                return
+
+            last_result = result
+            last_window = window
+            await apply_action(
+                finalizer.on_text(result.text, now=now),
+                result=result,
+                window_for_prosody=window,
+            )
+            if disconnect:
+                await apply_action(
+                    finalizer.on_disconnect(residual_text=result.text, now=now),
+                    result=result,
+                    window_for_prosody=window,
+                )
 
         async def worker() -> None:
             while True:
@@ -240,14 +349,14 @@ def create_app(
                 try:
                     if item is None:
                         return
-                    window, final = item
-                    await emit(window, final)
+                    window, disconnect = item
+                    await emit(window, disconnect=disconnect)
                 finally:
                     windows.task_done()
 
         worker_task = asyncio.create_task(worker())
 
-        def enqueue_latest(window: bytes, final: bool = False) -> None:
+        def enqueue_latest(window: bytes | None, *, disconnect: bool = False) -> None:
             nonlocal dropped_windows
             if windows.full():
                 try:
@@ -259,7 +368,7 @@ def create_app(
                     )
                 except asyncio.QueueEmpty:
                     pass
-            windows.put_nowait((window, final))
+            windows.put_nowait((window, disconnect))
 
         try:
             while True:
@@ -275,15 +384,19 @@ def create_app(
         finally:
             remaining = transcriber.flush()
             if remaining is not None:
-                enqueue_latest(remaining, final=True)
+                enqueue_latest(remaining, disconnect=True)
+            else:
+                # No residual audio: still allow disconnect residual finalization.
+                enqueue_latest(None, disconnect=True)
             await windows.join()
             await windows.put(None)
             await worker_task
             LOGGER.info(
-                "Audio channel disconnected session=%s channel=%s dropped_windows=%s",
+                "Audio channel disconnected session=%s channel=%s dropped_windows=%s finals=%s",
                 session_id,
                 channel_id,
                 dropped_windows,
+                finalizer.finals_emitted,
             )
 
     @app.get("/v1/sessions/{session_id}/metrics")

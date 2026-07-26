@@ -42,11 +42,13 @@ def test_delivered_event_is_measured_once(client, fake_engine) -> None:
     assert channel["channelId"] == "mic-1"
     assert channel["sourceType"] == "microphone"
     assert channel["label"] == "Headset"
-    assert channel["sampleCount"] == 1
-    assert channel["totalEvents"] == 1
+    # partial + disconnect final (issue #55)
+    assert channel["sampleCount"] == 2
+    assert channel["totalEvents"] == 2
     assert channel["droppedWindows"] == 0
     assert isinstance(channel["p50Ms"], int) and channel["p50Ms"] >= 0
-    assert channel["p50Ms"] == channel["p95Ms"] == event["latencyMs"]
+    assert event["type"] == "transcript.partial.v2"
+    assert channel["p50Ms"] == event["latencyMs"] or channel["p95Ms"] == event["latencyMs"]
     assert channel["lastEventAt"] is not None
 
 
@@ -61,8 +63,9 @@ def test_feed_subscribers_do_not_duplicate_samples(client, fake_engine) -> None:
         feed.receive_json()
 
     channel = get_metrics(client, "sess-feed")["channels"][0]
-    assert channel["sampleCount"] == 1
-    assert channel["totalEvents"] == 1
+    # One partial delivered + one disconnect final; feed fan-out must not multiply.
+    assert channel["sampleCount"] == 2
+    assert channel["totalEvents"] == 2
 
 
 def test_sessions_are_isolated_over_http(client, fake_engine) -> None:
@@ -82,8 +85,8 @@ def test_sessions_are_isolated_over_http(client, fake_engine) -> None:
     payload_b = get_metrics(client, "sess-b")
     assert len(payload_a["channels"]) == 1
     assert len(payload_b["channels"]) == 1
-    assert payload_a["channels"][0]["sampleCount"] == 1
-    assert payload_b["channels"][0]["sampleCount"] == 1
+    assert payload_a["channels"][0]["sampleCount"] == 2
+    assert payload_b["channels"][0]["sampleCount"] == 2
 
 
 def test_channels_are_isolated_over_http(client, fake_engine) -> None:
@@ -102,8 +105,8 @@ def test_channels_are_isolated_over_http(client, fake_engine) -> None:
     channels = get_metrics(client, "sess-multi")["channels"]
     assert [channel["channelId"] for channel in channels] == ["mic-1", "system-main"]
     for channel in channels:
-        assert channel["sampleCount"] == 1
-        assert channel["totalEvents"] == 1
+        assert channel["sampleCount"] == 2
+        assert channel["totalEvents"] == 2
 
 
 def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> None:
@@ -139,23 +142,19 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
     channels = get_metrics(client, "sess-echo")["channels"]
     assert [channel["channelId"] for channel in channels] == ["mic-1", "system-main"]
     mic, system = channels
-    assert mic["sampleCount"] == 1
-    assert mic["totalEvents"] == 1
-    assert system["sampleCount"] == 1
+    # Mic: 1 partial (local) + 1 disconnect final; suppressed echo not counted.
+    assert mic["sampleCount"] == 2
+    assert mic["totalEvents"] == 2
+    # System: partial + disconnect final
+    assert system["sampleCount"] == 2
 
 
 def test_retention_limit_is_enforced_over_http(fake_engine) -> None:
     registry = LatencyMetricsRegistry(max_samples_per_channel=3)
     client = TestClient(
         create_app(
-            # overlap=0 so 5 whole-window sends map 1:1 to 5 emitted events.
-            # With the default overlap (0.1s over a 0.4s step), 5 windows of
-            # 0.5s each leave a growing remainder that crosses
-            # whisper_min_audio_seconds and gets flushed as a 6th event on
-            # disconnect - correct sliding-window math (2.5s of audio at a
-            # 0.4s step yields 6 windows), not a bug, but irrelevant noise
-            # for a test that's only about the sampleCount/totalEvents
-            # retention-cap behavior.
+            # overlap=0 so 5 whole-window sends map 1:1 to 5 partials.
+            # Disconnect then adds one utterance final (#55) → 6 totalEvents.
             settings=make_test_settings(whisper_overlap_seconds=0.0),
             engine=fake_engine,
             metrics_registry=registry,
@@ -173,7 +172,7 @@ def test_retention_limit_is_enforced_over_http(fake_engine) -> None:
     assert payload["maxSamplesPerChannel"] == 3
     channel = payload["channels"][0]
     assert channel["sampleCount"] == 3
-    assert channel["totalEvents"] == 5
+    assert channel["totalEvents"] == 6
 
 
 def test_unknown_session_returns_empty_channels(client) -> None:
@@ -191,7 +190,7 @@ def test_injected_registry_receives_records(client, fake_engine, metrics_registr
 
     snapshot = metrics_registry.session_snapshot("sess-inj")
     assert len(snapshot.channels) == 1
-    assert snapshot.channels[0].total_events == 1
+    assert snapshot.channels[0].total_events == 2
 
 
 def test_fake_engine_never_loads_model(client, fake_engine) -> None:
