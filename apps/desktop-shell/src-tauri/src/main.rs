@@ -19,11 +19,17 @@ use desktop_shell::session_core_client::{
     channel_status_views, session_status_view, transcript_feed_entries, ChannelStatusView,
     SessionCoreClient, SessionStatusView, TranscriptFeedEntry,
 };
+#[allow(unused_imports)]
+use desktop_shell::secure_store::{
+    self, mask_secret, provider_logical_id, provider_secret_ref, logical_id_from_secret_ref,
+    MemorySecureSecretStore, OsSecureSecretStore, SecureSecretStore,
+};
 use desktop_shell::sidecar::{self, BinaryResolution, BinarySource};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Manager, RunEvent, State};
 
 struct AppState {
@@ -33,6 +39,8 @@ struct AppState {
     last_managed_session_id: Mutex<Option<String>>,
     /// Diretório de config do app (prefs do Assistente).
     config_dir: PathBuf,
+    /// Provider secrets (os:); never exposed fully to the webview.
+    secret_store: Arc<dyn SecureSecretStore>,
 }
 
 #[derive(Serialize)]
@@ -251,6 +259,7 @@ fn set_ai_provider_enabled(
 
 #[tauri::command]
 fn delete_ai_provider(state: State<AppState>, provider_id: String) -> Result<(), String> {
+    let _ = state.secret_store.delete(&provider_logical_id(&provider_id));
     ai_provider_client(&state)
         .delete_provider(&provider_id)
         .map_err(|e| e.to_string())
@@ -261,7 +270,32 @@ fn get_ai_provider_secret_preview(
     state: State<AppState>,
     provider_id: String,
 ) -> Result<SecretPreview, String> {
-    ai_provider_client(&state)
+    // Prefer local os: mask when store has the key; else ask session-core (env:).
+    let client = ai_provider_client(&state);
+    if let Ok(providers) = client.list_providers() {
+        if let Some(p) = providers.iter().find(|p| p.id == provider_id) {
+            if let Some(ref_str) = p.authentication.secret_ref.as_deref() {
+                if let Some(logical) = logical_id_from_secret_ref(ref_str) {
+                    match state.secret_store.get(logical) {
+                        Ok(Some(value)) => {
+                            return Ok(SecretPreview {
+                                provider_id,
+                                masked_value: Some(mask_secret(&value)),
+                            });
+                        }
+                        Ok(None) => {
+                            return Ok(SecretPreview {
+                                provider_id,
+                                masked_value: None,
+                            });
+                        }
+                        Err(e) => return Err(e.to_string()),
+                    }
+                }
+            }
+        }
+    }
+    client
         .secret_preview(&provider_id)
         .map_err(|e| e.to_string())
 }
@@ -271,8 +305,9 @@ fn test_ai_provider_connection(
     state: State<AppState>,
     provider_id: String,
 ) -> Result<ConnectionTestResult, String> {
+    let overrides = collect_secret_overrides(&state).map_err(|e| e.to_string())?;
     ai_provider_client(&state)
-        .test_connection(&provider_id)
+        .test_connection_with_secrets(&provider_id, Some(&overrides))
         .map_err(|e| e.to_string())
 }
 
@@ -285,15 +320,88 @@ fn invoke_ai_provider(
     capability: String,
     input: String,
 ) -> Result<InvocationResult, String> {
+    let overrides = collect_secret_overrides(&state).map_err(|e| e.to_string())?;
     ai_provider_client(&state)
-        .invoke(
+        .invoke_with_secrets(
             &session_id,
             channel_id.as_deref(),
             &route,
             &capability,
             &input,
+            Some(&overrides),
         )
         .map_err(|e| e.to_string())
+}
+
+/// Put secret in store; returns the secretRef to store on the provider (os:…).
+#[tauri::command]
+fn secret_store_put(
+    state: State<AppState>,
+    provider_id: String,
+    value: String,
+) -> Result<String, String> {
+    let logical = provider_logical_id(&provider_id);
+    state
+        .secret_store
+        .put(&logical, &value)
+        .map_err(|e| e.to_string())?;
+    Ok(provider_secret_ref(&provider_id))
+}
+
+#[tauri::command]
+fn secret_store_delete(state: State<AppState>, provider_id: String) -> Result<(), String> {
+    let logical = provider_logical_id(&provider_id);
+    state
+        .secret_store
+        .delete(&logical)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn secret_store_list_ids(state: State<AppState>) -> Result<Vec<String>, String> {
+    state.secret_store.list_ids().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn secret_store_has(state: State<AppState>, provider_id: String) -> Result<bool, String> {
+    let logical = provider_logical_id(&provider_id);
+    state.secret_store.has(&logical).map_err(|e| e.to_string())
+}
+
+fn collect_secret_overrides(
+    state: &State<AppState>,
+) -> Result<HashMap<String, String>, secure_store::StoreError> {
+    let mut map = HashMap::new();
+    let client = ai_provider_client(state);
+    let providers = match client.list_providers() {
+        Ok(p) => p,
+        Err(_) => return Ok(map),
+    };
+    for p in providers {
+        let Some(ref_str) = p.authentication.secret_ref.as_deref() else {
+            continue;
+        };
+        let Some(logical) = logical_id_from_secret_ref(ref_str) else {
+            continue;
+        };
+        if let Some(value) = state.secret_store.get(logical)? {
+            map.insert(ref_str.to_string(), value);
+        }
+    }
+    Ok(map)
+}
+
+fn default_secret_store(config_dir: &std::path::Path) -> Arc<dyn SecureSecretStore> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = config_dir;
+        Arc::new(OsSecureSecretStore::new(config_dir))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = config_dir;
+        Arc::new(MemorySecureSecretStore::new())
+    }
 }
 
 fn main() {
@@ -305,11 +413,14 @@ fn main() {
                 .expect("diretório de config do app");
             let config_path = config_dir.join("shell-config.json");
             let loaded = config::load(&config_path);
+            // Windows: OS keyring. Other platforms: in-memory (use env: for durable WSL/dev secrets).
+            let secret_store: Arc<dyn SecureSecretStore> = default_secret_store(&config_dir);
             app.manage(AppState {
                 config: Mutex::new(loaded),
                 managed_agent: Mutex::new(None),
                 last_managed_session_id: Mutex::new(None),
                 config_dir,
+                secret_store,
             });
             Ok(())
         })
@@ -333,6 +444,10 @@ fn main() {
             get_ai_provider_secret_preview,
             test_ai_provider_connection,
             invoke_ai_provider,
+            secret_store_put,
+            secret_store_delete,
+            secret_store_list_ids,
+            secret_store_has,
         ])
         .build(tauri::generate_context!())
         .expect("erro ao construir o shell desktop")

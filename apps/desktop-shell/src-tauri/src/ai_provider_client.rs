@@ -109,6 +109,15 @@ struct InvokeRequest<'a> {
     route: &'a str,
     capability: &'a str,
     input: &'a str,
+    /// Map secretRef → value for this request only (os: from desktop store). Never logged server-side.
+    #[serde(rename = "secretOverrides", skip_serializing_if = "Option::is_none")]
+    secret_overrides: Option<&'a std::collections::HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TestConnectionRequest<'a> {
+    #[serde(rename = "secretOverrides", skip_serializing_if = "Option::is_none")]
+    secret_overrides: Option<&'a std::collections::HashMap<String, String>>,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -168,8 +177,17 @@ impl AiProviderClient {
     }
 
     pub fn test_connection(&self, id: &str) -> Result<ConnectionTestResult, ClientError> {
+        self.test_connection_with_secrets(id, None)
+    }
+
+    pub fn test_connection_with_secrets(
+        &self,
+        id: &str,
+        secret_overrides: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<ConnectionTestResult, ClientError> {
         let url = format!("{}/api/ai-providers/{id}/test", self.base_url);
-        self.send_and_decode(self.http.post(url))
+        let body = TestConnectionRequest { secret_overrides };
+        self.send_and_decode(self.http.post(url).json(&body))
     }
 
     pub fn invoke(
@@ -180,6 +198,18 @@ impl AiProviderClient {
         capability: &str,
         input: &str,
     ) -> Result<InvocationResult, ClientError> {
+        self.invoke_with_secrets(session_id, channel_id, route, capability, input, None)
+    }
+
+    pub fn invoke_with_secrets(
+        &self,
+        session_id: &str,
+        channel_id: Option<&str>,
+        route: &str,
+        capability: &str,
+        input: &str,
+        secret_overrides: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<InvocationResult, ClientError> {
         let url = format!("{}/api/ai-providers/invoke", self.base_url);
         let body = InvokeRequest {
             session_id,
@@ -187,6 +217,7 @@ impl AiProviderClient {
             route,
             capability,
             input,
+            secret_overrides,
         };
         self.send_and_decode(self.http.post(url).json(&body))
     }

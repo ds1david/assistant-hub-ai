@@ -94,9 +94,13 @@ public class AiProviderController {
     }
 
     @PostMapping("/{id}/test")
-    public ConnectionTestResult test(@PathVariable("id") String id) {
+    public ConnectionTestResult test(
+            @PathVariable("id") String id,
+            @RequestBody(required = false) SecretOverridesBody body) {
         Provider provider = registry.findById(id).orElseThrow(() -> new ProviderNotFoundException(id));
-        return invocationService.testConnection(provider);
+        Map<String, String> overrides =
+                body != null && body.secretOverrides() != null ? body.secretOverrides() : Map.of();
+        return SecretOverrideContext.callWith(overrides, () -> invocationService.testConnection(provider));
     }
 
     /** Descoberta de modelos (027) — OpenAI-compatible {@code GET /models}. */
@@ -107,9 +111,17 @@ public class AiProviderController {
 
     @PostMapping("/invoke")
     public InvocationResult invoke(@RequestBody InvokeRequest request) {
-        return invocationService.invoke(
-                request.route(),
-                new InvocationRequest(request.sessionId(), request.channelId(), request.capability(), request.input()));
+        Map<String, String> overrides =
+                request.secretOverrides() != null ? request.secretOverrides() : Map.of();
+        return SecretOverrideContext.callWith(
+                overrides,
+                () -> invocationService.invoke(
+                        request.route(),
+                        new InvocationRequest(
+                                request.sessionId(),
+                                request.channelId(),
+                                request.capability(),
+                                request.input())));
     }
 
     /**
@@ -127,33 +139,38 @@ public class AiProviderController {
         InvocationRequest invocationRequest = new InvocationRequest(
                 request.sessionId(), request.channelId(), request.capability(), request.input());
 
+        Map<String, String> streamOverrides =
+                request.secretOverrides() != null ? request.secretOverrides() : Map.of();
         streamExecutor.execute(() -> {
             try {
-                invocationService.invokeStream(
-                        request.route(),
-                        invocationRequest,
-                        new StreamSink() {
-                            @Override
-                            public void onChunk(String text) {
-                                try {
-                                    emitter.send(SseEmitter.event().name("chunk").data(Map.of("text", text)));
-                                } catch (IOException e) {
-                                    cancelled.set(true);
+                SecretOverrideContext.callWith(streamOverrides, () -> {
+                    invocationService.invokeStream(
+                            request.route(),
+                            invocationRequest,
+                            new StreamSink() {
+                                @Override
+                                public void onChunk(String text) {
+                                    try {
+                                        emitter.send(SseEmitter.event().name("chunk").data(Map.of("text", text)));
+                                    } catch (IOException e) {
+                                        cancelled.set(true);
+                                    }
                                 }
-                            }
 
-                            @Override
-                            public void onTerminal(InvocationResult result) {
-                                try {
-                                    String event = result.success() ? "done" : "error";
-                                    emitter.send(SseEmitter.event().name(event).data(result));
-                                    emitter.complete();
-                                } catch (IOException e) {
-                                    emitter.completeWithError(e);
+                                @Override
+                                public void onTerminal(InvocationResult result) {
+                                    try {
+                                        String event = result.success() ? "done" : "error";
+                                        emitter.send(SseEmitter.event().name(event).data(result));
+                                        emitter.complete();
+                                    } catch (IOException e) {
+                                        emitter.completeWithError(e);
+                                    }
                                 }
-                            }
-                        },
-                        cancelled::get);
+                            },
+                            cancelled::get);
+                    return null;
+                });
             } catch (Exception e) {
                 emitter.completeWithError(e);
             }
@@ -210,12 +227,19 @@ public class AiProviderController {
 
     /**
      * Entrada de invoke — sem {@code sourceType}: origem é resolvida no servidor a partir da sessão.
+     * {@code secretOverrides} (opcional): mapa secretRef → valor para esta chamada (desktop os:); nunca logado.
      */
     public record InvokeRequest(
             @NotBlank String sessionId,
             String channelId,
             @NotBlank String route,
             @NotBlank String capability,
-            @NotBlank String input) {
+            @NotBlank String input,
+            Map<String, String> secretOverrides) {
+    }
+
+    /** Body opcional de POST …/test com overrides de segredo (issue #64). */
+    public record SecretOverridesBody(Map<String, String> secretOverrides) {
     }
 }
+

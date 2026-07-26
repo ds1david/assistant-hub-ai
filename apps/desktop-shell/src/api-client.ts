@@ -228,6 +228,23 @@ export function getAiProviderSecretPreview(providerId: string): Promise<SecretPr
   return invoke("get_ai_provider_secret_preview", { providerId });
 }
 
+/** Store secret in OS/memory store; returns `os:…` secretRef. Value is never returned. */
+export function secretStorePut(providerId: string, value: string): Promise<string> {
+  return invoke("secret_store_put", { providerId, value });
+}
+
+export function secretStoreDelete(providerId: string): Promise<void> {
+  return invoke("secret_store_delete", { providerId });
+}
+
+export function secretStoreListIds(): Promise<string[]> {
+  return invoke("secret_store_list_ids");
+}
+
+export function secretStoreHas(providerId: string): Promise<boolean> {
+  return invoke("secret_store_has", { providerId });
+}
+
 export function testAiProviderConnection(providerId: string): Promise<ConnectionTestResult> {
   return invoke("test_ai_provider_connection", { providerId });
 }
