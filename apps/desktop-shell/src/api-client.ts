@@ -104,6 +104,41 @@ export function getTranscriptFeed(sessionId: string): Promise<TranscriptFeedEntr
   return invoke("get_transcript_feed", { sessionId });
 }
 
+export interface MemorySearchHit {
+  eventId: string;
+  type: string;
+  text: string;
+  sourceType?: string | null;
+  channelId?: string | null;
+  occurredAt: string;
+}
+
+export interface MemoryItem {
+  kind: string;
+  text: string;
+  eventId: string;
+  sourceType?: string | null;
+  occurredAt: string;
+}
+
+export function searchSessionMemory(
+  sessionId: string,
+  q?: string | null,
+  sourceType?: string | null,
+  limit?: number | null,
+): Promise<MemorySearchHit[]> {
+  return invoke("search_session_memory", {
+    sessionId,
+    q: q ?? null,
+    sourceType: sourceType ?? null,
+    limit: limit ?? null,
+  });
+}
+
+export function getSessionMemoryItems(sessionId: string): Promise<MemoryItem[]> {
+  return invoke("get_session_memory_items", { sessionId });
+}
+
 export function getAgentStatus(): Promise<AgentStatus> {
   return invoke("get_agent_status");
 }

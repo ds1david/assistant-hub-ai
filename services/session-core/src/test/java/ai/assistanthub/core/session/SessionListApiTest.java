@@ -1,6 +1,7 @@
 package ai.assistanthub.core.session;
 
 import ai.assistanthub.core.memory.MemoryHubTestSupport;
+import ai.assistanthub.core.memory.MemorySearchService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -26,7 +27,7 @@ class SessionListApiTest {
     @BeforeEach
     void setUp() {
         repository = new SessionRepository(MemoryHubTestSupport.newStore(tempDir));
-        controller = new SessionController(repository);
+        controller = new SessionController(repository, new MemorySearchService(repository));
     }
 
     @Test

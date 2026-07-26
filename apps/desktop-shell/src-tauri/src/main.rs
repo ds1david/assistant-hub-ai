@@ -17,7 +17,7 @@ use desktop_shell::assistant_prefs::{self, AssistantSessionPreferences};
 use desktop_shell::config::{self, ShellConfig};
 use desktop_shell::session_core_client::{
     channel_status_views, session_status_view, transcript_feed_entries, ChannelStatusView,
-    SessionCoreClient, SessionStatusView, TranscriptFeedEntry,
+    MemoryItem, MemorySearchHit, SessionCoreClient, SessionStatusView, TranscriptFeedEntry,
 };
 #[allow(unused_imports)]
 use desktop_shell::secure_store::{
@@ -102,6 +102,38 @@ fn set_assistant_prefs(
 ) -> Result<(), String> {
     let path = assistant_prefs::prefs_path(&state.config_dir);
     assistant_prefs::set_prefs(&path, &session_id, prefs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn search_session_memory(
+    state: State<AppState>,
+    session_id: String,
+    q: Option<String>,
+    source_type: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<MemorySearchHit>, String> {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    let client = SessionCoreClient::new(base_url);
+    client
+        .search_session(
+            &session_id,
+            q.as_deref(),
+            source_type.as_deref(),
+            limit,
+        )
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_session_memory_items(
+    state: State<AppState>,
+    session_id: String,
+) -> Result<Vec<MemoryItem>, String> {
+    let base_url = state.config.lock().unwrap().session_core_base_url.clone();
+    let client = SessionCoreClient::new(base_url);
+    client
+        .memory_items(&session_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -430,6 +462,8 @@ fn main() {
             get_session_status,
             create_session,
             list_sessions,
+            search_session_memory,
+            get_session_memory_items,
             get_transcript_feed,
             get_agent_status,
             start_agent,

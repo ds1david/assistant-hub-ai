@@ -8,22 +8,27 @@ import {
   secretStorePut,
   secretStoreDelete,
   getSessionStatus,
+  getSessionMemoryItems,
   getTranscriptFeed,
   invokeAiProvider,
   listAiProviders,
   listSessions,
   saveAiProvider,
+  searchSessionMemory,
   setAiProviderEnabled,
   startAgent,
   stopAgent,
   testAiProviderConnection,
   type AgentStatus,
+  type MemoryItem,
+  type MemorySearchHit,
   type Provider,
   type SessionSummary,
   type TranscriptFeedEntry,
 } from "./api-client";
 import { AssistantAutoController } from "./assistant-auto";
 import { renderAssistantPanel } from "./assistant-panel";
+import { renderMemoryPanel, type MemoryPanelState } from "./memory-panel";
 import {
   DEFAULT_ASSISTANT_PREFS,
   clonePrefs,
@@ -86,6 +91,16 @@ let aiProviderPanelState: AiProviderPanelState = {
   error: null,
 };
 
+let memoryPanelState: MemoryPanelState = {
+  sessionId: null,
+  query: "",
+  sourceTypeFilter: "",
+  hits: [],
+  items: [],
+  error: null,
+  busy: false,
+};
+
 const assistantController = new AssistantAutoController({
   invoke: (input) => {
     if (!activeSessionId) {
@@ -95,6 +110,10 @@ const assistantController = new AssistantAutoController({
     return invokeAiProvider(activeSessionId, LIVE_ANSWER_ROUTE, "chat", input);
   },
 });
+
+function memoryPanelContainer(): HTMLElement {
+  return document.getElementById("memory-panel") as HTMLElement;
+}
 
 function sessionStatusContainer(): HTMLElement {
   return document.getElementById("session-status") as HTMLElement;
@@ -280,9 +299,91 @@ export async function selectSession(sessionId: string): Promise<void> {
   paintSessionPicker();
   // updateAssistantGuards emite se o estado mudou; paint cobre o caso sem mudança.
   paintAssistant();
+  memoryPanelState = {
+    ...memoryPanelState,
+    sessionId,
+    hits: [],
+    items: [],
+    error: null,
+  };
+  paintMemoryPanel();
+  void refreshMemoryItems();
   void refreshAgentPanel();
   void pollSessionStatus();
   void pollTranscriptFeed();
+}
+
+function paintMemoryPanel(): void {
+  const el = memoryPanelContainer();
+  if (!el) {
+    return;
+  }
+  renderMemoryPanel(el, memoryPanelState, {
+    onSearch: (query, sourceType) => {
+      void (async () => {
+        if (!activeSessionId) {
+          return;
+        }
+        memoryPanelState = {
+          ...memoryPanelState,
+          query,
+          sourceTypeFilter: sourceType,
+          busy: true,
+          error: null,
+        };
+        paintMemoryPanel();
+        try {
+          const hits = await searchSessionMemory(
+            activeSessionId,
+            query,
+            sourceType || null,
+            50,
+          );
+          memoryPanelState = { ...memoryPanelState, hits, busy: false };
+        } catch (error) {
+          memoryPanelState = {
+            ...memoryPanelState,
+            hits: [],
+            busy: false,
+            error: String(error),
+          };
+        }
+        paintMemoryPanel();
+      })();
+    },
+    onRefreshItems: () => {
+      void refreshMemoryItems();
+    },
+  });
+}
+
+async function refreshMemoryItems(): Promise<void> {
+  if (!activeSessionId) {
+    memoryPanelState = {
+      ...memoryPanelState,
+      sessionId: null,
+      items: [] as MemoryItem[],
+      hits: [] as MemorySearchHit[],
+    };
+    paintMemoryPanel();
+    return;
+  }
+  try {
+    const items = await getSessionMemoryItems(activeSessionId);
+    memoryPanelState = {
+      ...memoryPanelState,
+      sessionId: activeSessionId,
+      items,
+      error: null,
+    };
+  } catch (error) {
+    memoryPanelState = {
+      ...memoryPanelState,
+      sessionId: activeSessionId,
+      error: String(error),
+    };
+  }
+  paintMemoryPanel();
 }
 
 async function createAndSelectSession(): Promise<void> {
@@ -545,6 +646,7 @@ function bootstrap(): void {
   // Guards primeiro (sem sessão → controles desabilitados); paint se emit for no-op.
   updateAssistantGuards();
   paintAssistant();
+  paintMemoryPanel();
   paintSessionPicker();
   void refreshSessionList().then(() => {
     void refreshAgentPanel();

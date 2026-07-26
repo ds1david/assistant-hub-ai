@@ -56,6 +56,35 @@ impl HubEvent {
     }
 }
 
+/// Wire type for GET /api/sessions/{id}/search (issue #65).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MemorySearchHit {
+    #[serde(rename = "eventId")]
+    pub event_id: String,
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub text: String,
+    #[serde(rename = "sourceType", default)]
+    pub source_type: Option<String>,
+    #[serde(rename = "channelId", default)]
+    pub channel_id: Option<String>,
+    #[serde(rename = "occurredAt")]
+    pub occurred_at: String,
+}
+
+/// Wire type for GET /api/sessions/{id}/memory-items.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MemoryItem {
+    pub kind: String,
+    pub text: String,
+    #[serde(rename = "eventId")]
+    pub event_id: String,
+    #[serde(rename = "sourceType", default)]
+    pub source_type: Option<String>,
+    #[serde(rename = "occurredAt")]
+    pub occurred_at: String,
+}
+
 // ---------------------------------------------------------------------------------------
 // Erros
 // ---------------------------------------------------------------------------------------
@@ -80,6 +109,21 @@ impl fmt::Display for ClientError {
 }
 
 impl std::error::Error for ClientError {}
+
+/// Minimal query escaping for q/sourceType (spaces and reserved).
+fn urlencoding_minimal(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            ' ' => "%20".to_string(),
+            '&' => "%26".to_string(),
+            '=' => "%3D".to_string(),
+            '?' => "%3F".to_string(),
+            '#' => "%23".to_string(),
+            c if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' => c.to_string(),
+            c => format!("%{:02X}", c as u8),
+        })
+        .collect()
+}
 
 // ---------------------------------------------------------------------------------------
 // Cliente HTTP cru (T008)
@@ -168,6 +212,56 @@ impl SessionCoreClient {
         match resp.status().as_u16() {
             200 => resp
                 .json::<Vec<HubEvent>>()
+                .map_err(|e| ClientError::Decode(e.to_string())),
+            404 => Err(ClientError::NotFound),
+            other => Err(ClientError::Http(other.to_string())),
+        }
+    }
+
+    /// GET /api/sessions/{id}/search?q=&sourceType=&limit=
+    pub fn search_session(
+        &self,
+        session_id: &str,
+        q: Option<&str>,
+        source_type: Option<&str>,
+        limit: Option<u32>,
+    ) -> Result<Vec<MemorySearchHit>, ClientError> {
+        let mut url = format!("{}/api/sessions/{session_id}/search?", self.base_url);
+        let mut params = Vec::new();
+        if let Some(q) = q.filter(|s| !s.is_empty()) {
+            params.push(format!("q={}", urlencoding_minimal(q)));
+        }
+        if let Some(st) = source_type.filter(|s| !s.is_empty()) {
+            params.push(format!("sourceType={}", urlencoding_minimal(st)));
+        }
+        if let Some(lim) = limit {
+            params.push(format!("limit={lim}"));
+        }
+        url.push_str(&params.join("&"));
+        let resp = self
+            .http
+            .get(url)
+            .send()
+            .map_err(|e| ClientError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => resp
+                .json::<Vec<MemorySearchHit>>()
+                .map_err(|e| ClientError::Decode(e.to_string())),
+            404 => Err(ClientError::NotFound),
+            other => Err(ClientError::Http(other.to_string())),
+        }
+    }
+
+    pub fn memory_items(&self, session_id: &str) -> Result<Vec<MemoryItem>, ClientError> {
+        let url = format!("{}/api/sessions/{session_id}/memory-items", self.base_url);
+        let resp = self
+            .http
+            .get(url)
+            .send()
+            .map_err(|e| ClientError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => resp
+                .json::<Vec<MemoryItem>>()
                 .map_err(|e| ClientError::Decode(e.to_string())),
             404 => Err(ClientError::NotFound),
             other => Err(ClientError::Http(other.to_string())),
