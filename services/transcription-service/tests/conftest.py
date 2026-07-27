@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 
 import pytest
@@ -23,6 +24,7 @@ class FakeTranscriptionEngine(TranscriptionEngine):
     scripted_texts: list[str] = field(default_factory=list)
     calls: list[dict] = field(default_factory=list)
     _loaded: bool = False
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     @property
     def loaded(self) -> bool:
@@ -32,11 +34,13 @@ class FakeTranscriptionEngine(TranscriptionEngine):
         self._loaded = True
 
     def script(self, *texts: str) -> None:
-        self.scripted_texts.extend(texts)
+        with self._lock:
+            self.scripted_texts.extend(texts)
 
     def transcribe(self, audio, language: str | None = None) -> EngineResult:
-        self.calls.append({"language": language})
-        text = self.scripted_texts.pop(0) if self.scripted_texts else "transcricao sintetica"
+        with self._lock:
+            self.calls.append({"language": language})
+            text = self.scripted_texts.pop(0) if self.scripted_texts else "transcricao sintetica"
         return EngineResult(
             segments=(EngineSegment(text=text, start=0.0, end=1.0),),
             language="pt",

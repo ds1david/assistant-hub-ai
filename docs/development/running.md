@@ -240,6 +240,8 @@ cd /home/david/workspace/assistant-hub-ai
 
 **Header do dashboard Streaming Foundation (`:8001`):** o header fixo mostra o **sessionId** em uso (o mesmo dos eventos de transcript / path de áudio do agent), com ação **Copiar** para colar no `--session` ou no shell **sem** abrir o log do PowerShell. Também mostra a URL base do STT e uma nota de que o **profile** vem do agent (`run --profile …`). Use o id copiado para alinhar agent ↔ shell ↔ STT (issues #47 / #49 / #51).
 
+**Métricas de sessão STT:** `GET http://localhost:8001/v1/sessions/<sessionId>/metrics` — use **`totalEvents`** como contagem de eventos entregues por canal (partial + final de disconnect/utterance); `sampleCount` é o ring de latência (≤ max). Eco de microfone **suprimido** (ADR-0008) **não** entra na contagem. Após parar o agent, se a leitura for imediata, reconsulte em até ~2 s. Validação: [specs/034-stt-echo-metrics-disconnect/quickstart.md](../../specs/034-stt-echo-metrics-disconnect/quickstart.md).
+
 Alternativa a partir do PowerShell Windows (sobe Compose + agent):
 
 ```powershell

@@ -123,8 +123,6 @@ def create_app(
         adaptive_window = (
             AdaptiveWindowChannel(settings) if settings.adaptive_window_enabled else None
         )
-        # (pcm_window | None, is_disconnect_flush). None window = disconnect-only tick.
-        windows: asyncio.Queue[tuple[bytes | None, bool] | None] = asyncio.Queue(maxsize=2)
         dropped_windows = 0
         last_result: TranscriptionResult | None = None
         last_window: bytes | None = None
@@ -144,6 +142,7 @@ def create_app(
             final: bool,
             result: TranscriptionResult | None,
             window_for_prosody: bytes | None,
+            skip_direct_send: bool = False,
         ) -> None:
             occurred_at = datetime.now(timezone.utc)
             latency_ms = result.latency_ms if result is not None else 0
@@ -168,7 +167,18 @@ def create_app(
                 "droppedWindows": dropped_windows,
                 "occurredAt": occurred_at.isoformat(),
             }
+            # Count before any await (prosody / send / fan-out): TestClient cancels the
+            # ASGI task on WS exit (CancelScope after websocket.disconnect), so metrics
+            # must not depend on I/O that can be aborted mid-teardown.
+            metrics.record_transcription(
+                session_id=session_id,
+                channel_id=channel_id,
+                source_type=source_type,
+                label=label,
+                latency_ms=latency_ms,
+            )
             # Prosody only on Final when enabled; failures omit field (never drop event).
+            # Runs after metrics so disconnect cancel cannot skip the sample count.
             if final and settings.prosody_enabled and window_for_prosody is not None:
                 prosody = await asyncio.to_thread(
                     estimate_prosody,
@@ -178,27 +188,27 @@ def create_app(
                 )
                 if prosody is not None:
                     event["prosody"] = prosody
-            # Client may already be gone on disconnect flush; still fan-out + metrics.
+            # Disconnect finals skip direct send (client is closing). Idle/max-open
+            # finals still use the live socket so WS tests can receive them.
+            if not skip_direct_send:
+                try:
+                    await websocket.send_json(event)
+                except Exception:
+                    LOGGER.debug(
+                        "Audio client closed before event delivery session=%s channel=%s final=%s",
+                        session_id,
+                        channel_id,
+                        final,
+                    )
             try:
-                await websocket.send_json(event)
+                await asyncio.wait_for(broadcaster.publish(event), timeout=0.5)
             except Exception:
                 LOGGER.debug(
-                    "Audio client closed before event delivery session=%s channel=%s final=%s",
+                    "Transcript fan-out failed session=%s channel=%s final=%s",
                     session_id,
                     channel_id,
                     final,
                 )
-            await broadcaster.publish(event)
-            # Ponto único de registro: uma amostra por evento entregue. O
-            # fan-out do broadcaster repete o mesmo evento por cliente e não
-            # deve contar.
-            metrics.record_transcription(
-                session_id=session_id,
-                channel_id=channel_id,
-                source_type=source_type,
-                label=label,
-                latency_ms=latency_ms,
-            )
             # Adaptive window only on partials with a live transcription result.
             # Finals (idle/disconnect) reuse last meta and must not re-step the window.
             if adaptive_window is not None and result is not None and not final:
@@ -267,6 +277,7 @@ def create_app(
                 final=True,
                 result=meta,
                 window_for_prosody=prosody_window,
+                skip_direct_send=action.reason == "disconnect",
             )
             LOGGER.info(
                 "Utterance final session=%s channel=%s reason=%s finals=%s idle_closes=%s max_open_closes=%s",
@@ -343,71 +354,9 @@ def create_app(
                     window_for_prosody=window,
                 )
 
-        async def worker() -> None:
-            while True:
-                item = await windows.get()
-                try:
-                    if item is None:
-                        return
-                    window, disconnect = item
-                    await emit(window, disconnect=disconnect)
-                finally:
-                    windows.task_done()
-
-        worker_task = asyncio.create_task(worker())
-
-        def enqueue_latest(window: bytes | None, *, disconnect: bool = False) -> None:
-            nonlocal dropped_windows
-            # Never drop a disconnect tick: drain room first so finalization always runs.
-            if disconnect:
-                while windows.full():
-                    try:
-                        windows.get_nowait()
-                        windows.task_done()
-                        dropped_windows += 1
-                        metrics.record_dropped_window(
-                            session_id=session_id, channel_id=channel_id
-                        )
-                    except asyncio.QueueEmpty:
-                        break
-                windows.put_nowait((window, True))
-                return
-            if windows.full():
-                try:
-                    windows.get_nowait()
-                    windows.task_done()
-                    dropped_windows += 1
-                    metrics.record_dropped_window(
-                        session_id=session_id, channel_id=channel_id
-                    )
-                except asyncio.QueueEmpty:
-                    pass
-            windows.put_nowait((window, False))
-
-        try:
-            while True:
-                message = await websocket.receive()
-                if data := message.get("bytes"):
-                    window = transcriber.append(data)
-                    if window is not None:
-                        enqueue_latest(window)
-                elif message.get("type") == "websocket.disconnect":
-                    break
-        except WebSocketDisconnect:
-            pass
-        finally:
-            # Drain in-flight windows before flush so disconnect is not racing a full queue
-            # (maxsize=2) and cannot drop the local-speech window that still needs delivery.
-            await windows.join()
+        async def finalize_disconnect() -> None:
             remaining = transcriber.flush()
-            if remaining is not None:
-                enqueue_latest(remaining, disconnect=True)
-            else:
-                # No residual audio: still allow disconnect residual finalization.
-                enqueue_latest(None, disconnect=True)
-            await windows.join()
-            await windows.put(None)
-            await worker_task
+            await emit(remaining, disconnect=True)
             LOGGER.info(
                 "Audio channel disconnected session=%s channel=%s dropped_windows=%s finals=%s",
                 session_id,
@@ -415,6 +364,39 @@ def create_app(
                 dropped_windows,
                 finalizer.finals_emitted,
             )
+
+        try:
+            while True:
+                message = await websocket.receive()
+                if data := message.get("bytes"):
+                    window = transcriber.append(data)
+                    if window is not None:
+                        # Sequential emit on the connection task: receive is gated by
+                        # transcription (natural backpressure). Disconnect finalization
+                        # cannot race a worker queue or join()/task_done accounting.
+                        await emit(window, disconnect=False)
+                elif message.get("type") == "websocket.disconnect":
+                    break
+        except WebSocketDisconnect:
+            pass
+        finally:
+            # Starlette TestClient __exit__ sends websocket.disconnect then cancels the
+            # ASGI task (CancelScope). Shield so residual + utterance final + metrics
+            # still complete under that cancellation race (echo metrics flake).
+            try:
+                await asyncio.shield(finalize_disconnect())
+            except asyncio.CancelledError:
+                # If shield itself was interrupted before scheduling, best-effort sync path.
+                if finalizer.state == "open" and finalizer.last_text.strip():
+                    metrics.record_transcription(
+                        session_id=session_id,
+                        channel_id=channel_id,
+                        source_type=source_type,
+                        label=label,
+                        latency_ms=last_result.latency_ms if last_result else 0,
+                    )
+                    finalizer.on_disconnect(residual_text=None)
+                raise
 
     @app.get("/v1/sessions/{session_id}/metrics")
     async def session_metrics(session_id: str) -> dict:

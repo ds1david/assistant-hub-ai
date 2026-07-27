@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import numpy as np
 from fastapi.testclient import TestClient
 
@@ -23,6 +25,30 @@ def get_metrics(client: TestClient, session_id: str) -> dict:
     response = client.get(f"/v1/sessions/{session_id}/metrics")
     assert response.status_code == 200
     return response.json()
+
+
+def wait_metrics(
+    client: TestClient,
+    session_id: str,
+    *,
+    min_sample_count: int = 2,
+    expected_channels: int | None = None,
+    timeout_s: float = 2.0,
+) -> dict:
+    """Poll metrics until disconnect finals land (TestClient can race ASGI finally)."""
+    deadline = time.monotonic() + timeout_s
+    last: dict | None = None
+    while time.monotonic() < deadline:
+        last = get_metrics(client, session_id)
+        channels = last["channels"]
+        if expected_channels is not None and len(channels) != expected_channels:
+            time.sleep(0.01)
+            continue
+        if channels and all(ch["sampleCount"] >= min_sample_count for ch in channels):
+            return last
+        time.sleep(0.01)
+    assert last is not None
+    return last
 
 
 def test_delivered_event_is_measured_once(client, fake_engine) -> None:
@@ -127,25 +153,29 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
         with client.websocket_connect(
             "/ws/audio/sess-echo/mic-1?sourceType=microphone"
         ) as mic_ws:
-            # A primeira janela duplica o transcript do sistema e é suprimida.
-            # Receber o evento da segunda garante que a suprimida já passou
-            # pelo worker (FIFO) quando o GET abaixo roda.
+            # First mic window duplicates system text and is suppressed (ADR-0008).
+            # Receive the second (local) partial so sequential emit finished the
+            # suppressed path before nested WS teardown.
             mic_ws.send_bytes(WINDOW)
             mic_ws.send_bytes(WINDOW)
             event = mic_ws.receive_json()
             assert event["text"] == "fala local diferente agora"
             assert event["type"] == "transcript.partial.v2"
 
-    # finally{} awaits worker join before context exit — metrics see complete disconnect.
-    channels = get_metrics(client, "sess-echo")["channels"]
+    # Nested WS teardown can return before ASGI finally finishes under load;
+    # poll until both channels have partial + disconnect final (SC-002, ≤2s).
+    channels = wait_metrics(
+        client, "sess-echo", min_sample_count=2, expected_channels=2
+    )["channels"]
     assert [channel["channelId"] for channel in channels] == ["mic-1", "system-main"]
     mic, system = channels
-    # Mic: 1 partial (local) + 1 disconnect/idle final; suppressed echo not counted.
-    # Without suppress we would see ≥2 partials (+ final) → totalEvents ≥ 3.
+    # Mic: 1 partial (local speech) + 1 disconnect/idle final; suppressed echo not
+    # counted as delivered (specs/034 FR-005). Without suppress → ≥2 partials + final.
     assert mic["sampleCount"] == 2
     assert mic["totalEvents"] == 2
     # System: partial + disconnect final
     assert system["sampleCount"] == 2
+    assert system["totalEvents"] == 2
 
 
 def test_retention_limit_is_enforced_over_http(fake_engine) -> None:

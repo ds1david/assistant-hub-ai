@@ -25,7 +25,9 @@ class TranscriptBroadcaster:
         stale: list[WebSocket] = []
         for client in clients:
             try:
-                await client.send_json(event)
+                # Bound each fan-out send so one stuck subscriber cannot block
+                # disconnect finalization / metrics on the producer channel.
+                await asyncio.wait_for(client.send_json(event), timeout=1.0)
             except Exception:
                 stale.append(client)
 
