@@ -153,9 +153,9 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
         with client.websocket_connect(
             "/ws/audio/sess-echo/mic-1?sourceType=microphone"
         ) as mic_ws:
-            # A primeira janela duplica o transcript do sistema e é suprimida.
-            # Receber o evento da segunda garante que a suprimida já passou
-            # pelo worker (FIFO) antes do teardown.
+            # First mic window duplicates system text and is suppressed (ADR-0008).
+            # Receive the second (local) partial so sequential emit finished the
+            # suppressed path before nested WS teardown.
             mic_ws.send_bytes(WINDOW)
             mic_ws.send_bytes(WINDOW)
             event = mic_ws.receive_json()
@@ -163,18 +163,19 @@ def test_suppressed_echo_is_not_counted_as_delivered(client, fake_engine) -> Non
             assert event["type"] == "transcript.partial.v2"
 
     # Nested WS teardown can return before ASGI finally finishes under load;
-    # poll until both channels have partial + disconnect final.
+    # poll until both channels have partial + disconnect final (SC-002, ≤2s).
     channels = wait_metrics(
         client, "sess-echo", min_sample_count=2, expected_channels=2
     )["channels"]
     assert [channel["channelId"] for channel in channels] == ["mic-1", "system-main"]
     mic, system = channels
-    # Mic: 1 partial (local) + 1 disconnect/idle final; suppressed echo not counted.
-    # Without suppress we would see ≥2 partials (+ final) → totalEvents ≥ 3.
+    # Mic: 1 partial (local speech) + 1 disconnect/idle final; suppressed echo not
+    # counted as delivered (specs/034 FR-005). Without suppress → ≥2 partials + final.
     assert mic["sampleCount"] == 2
     assert mic["totalEvents"] == 2
     # System: partial + disconnect final
     assert system["sampleCount"] == 2
+    assert system["totalEvents"] == 2
 
 
 def test_retention_limit_is_enforced_over_http(fake_engine) -> None:

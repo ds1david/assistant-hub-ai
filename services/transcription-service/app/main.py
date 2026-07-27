@@ -167,7 +167,18 @@ def create_app(
                 "droppedWindows": dropped_windows,
                 "occurredAt": occurred_at.isoformat(),
             }
+            # Count before any await (prosody / send / fan-out): TestClient cancels the
+            # ASGI task on WS exit (CancelScope after websocket.disconnect), so metrics
+            # must not depend on I/O that can be aborted mid-teardown.
+            metrics.record_transcription(
+                session_id=session_id,
+                channel_id=channel_id,
+                source_type=source_type,
+                label=label,
+                latency_ms=latency_ms,
+            )
             # Prosody only on Final when enabled; failures omit field (never drop event).
+            # Runs after metrics so disconnect cancel cannot skip the sample count.
             if final and settings.prosody_enabled and window_for_prosody is not None:
                 prosody = await asyncio.to_thread(
                     estimate_prosody,
@@ -177,16 +188,6 @@ def create_app(
                 )
                 if prosody is not None:
                     event["prosody"] = prosody
-            # Count before any await: TestClient cancels the ASGI task on WS exit
-            # (CancelScope after websocket.disconnect), so metrics must not depend
-            # on a successful send to a closing socket.
-            metrics.record_transcription(
-                session_id=session_id,
-                channel_id=channel_id,
-                source_type=source_type,
-                label=label,
-                latency_ms=latency_ms,
-            )
             # Disconnect finals skip direct send (client is closing). Idle/max-open
             # finals still use the live socket so WS tests can receive them.
             if not skip_direct_send:
